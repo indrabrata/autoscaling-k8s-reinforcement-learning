@@ -1,0 +1,1406 @@
+{
+  "transactions": [
+    {
+      "id": 0,
+      "amount": 674.37,
+      "category": "health",
+      "user_id": 2,
+      "ts": "2023-08-10T13:27:09"
+    },
+    {
+      "id": 1,
+      "amount": 87.43,
+      "category": "entertainment",
+      "user_id": 5,
+      "ts": "2023-12-16T07:34:35"
+    },
+    {
+      "id": 2,
+      "amount": 431.12,
+      "category": "shopping",
+      "user_id": 5,
+      "ts": "2023-06-20T20:21:14"
+    },
+    {
+      "id": 3,
+      "amount": 567.78,
+      "category": "salary",
+      "user_id": 8,
+      "ts": "2023-01-01T03:52:10"
+    },
+    {
+      "id": 4,
+      "amount": 2838.91,
+      "category": "food",
+      "user_id": 7,
+      "ts": "2023-03-03T05:41:16"
+    },
+    {
+      "id": 5,
+      "amount": 3781.61,
+      "category": "shopping",
+      "user_id": 5,
+      "ts": "2023-12-09T17:04:43"
+    },
+    {
+      "id": 6,
+      "amount": 3103.25,
+      "category": "entertainment",
+      "user_id": 2,
+      "ts": "2023-02-21T14:28:05"
+    },
+    {
+      "id": 7,
+      "amount": 4200.6,
+      "category": "salary",
+      "user_id": 1,
+      "ts": "2023-01-13T11:30:08"
+    },
+    {
+      "id": 8,
+      "amount": 2444.41,
+      "category": "education",
+      "user_id": 3,
+      "ts": "2023-11-28T15:43:03"
+    },
+    {
+      "id": 9,
+      "amount": 1233.24,
+      "category": "salary",
+      "user_id": 3,
+      "ts": "2023-03-25T23:43:20"
+    },
+    {
+      "id": 10,
+      "amount": 4831.54,
+      "category": "health",
+      "user_id": 7,
+      "ts": "2023-12-16T21:44:30"
+    },
+    {
+      "id": 11,
+      "amount": 3177.66,
+      "category": "entertainment",
+      "user_id": 3,
+      "ts": "2023-07-25T09:25:43"
+    },
+    {
+      "id": 12,
+      "amount": 3211.78,
+      "category": "salary",
+      "user_id": 1,
+      "ts": "2023-03-24T08:58:33"
+    },
+    {
+      "id": 13,
+      "amount": 3101.38,
+      "category": "transport",
+      "user_id": 5,
+      "ts": "2023-05-19T22:22:47"
+    },
+    {
+      "id": 14,
+      "amount": 4833.93,
+      "category": "bills",
+      "user_id": 6,
+      "ts": "2023-02-01T16:41:00"
+    },
+    {
+      "id": 15,
+      "amount": 1737.02,
+      "category": "entertainment",
+      "user_id": 4,
+      "ts": "2023-05-28T20:41:05"
+    },
+    {
+      "id": 16,
+      "amount": 2486.0,
+      "category": "transport",
+      "user_id": 6,
+      "ts": "2023-12-22T22:16:50"
+    },
+    {
+      "id": 17,
+      "amount": 4113.06,
+      "category": "health",
+      "user_id": 2,
+      "ts": "2023-04-11T23:55:21"
+    },
+    {
+      "id": 18,
+      "amount": 1158.88,
+      "category": "education",
+      "user_id": 7,
+      "ts": "2023-05-14T15:59:41"
+    },
+    {
+      "id": 19,
+      "amount": 3627.2,
+      "category": "shopping",
+      "user_id": 7,
+      "ts": "2023-09-16T07:05:52"
+    },
+    {
+      "id": 20,
+      "amount": 3458.35,
+      "category": "entertainment",
+      "user_id": 5,
+      "ts": "2023-03-24T09:46:00"
+    },
+    {
+      "id": 21,
+      "amount": 1386.75,
+      "category": "salary",
+      "user_id": 5,
+      "ts": "2023-03-20T06:19:15"
+    },
+    {
+      "id": 22,
+      "amount": 4556.37,
+      "category": "health",
+      "user_id": 5,
+      "ts": "2023-06-23T22:06:56"
+    },
+    {
+      "id": 23,
+      "amount": 9.45,
+      "category": "bills",
+      "user_id": 4,
+      "ts": "2023-07-22T00:39:25"
+    },
+    {
+      "id": 24,
+      "amount": 4666.76,
+      "category": "shopping",
+      "user_id": 6,
+      "ts": "2023-09-13T19:13:43"
+    },
+    {
+      "id": 25,
+      "amount": 331.78,
+      "category": "bills",
+      "user_id": 2,
+      "ts": "2023-12-25T08:43:30"
+    },
+    {
+      "id": 26,
+      "amount": 3569.65,
+      "category": "transport",
+      "user_id": 7,
+      "ts": "2023-08-13T00:14:52"
+    },
+    {
+      "id": 27,
+      "amount": 3545.35,
+      "category": "entertainment",
+      "user_id": 9,
+      "ts": "2023-11-23T21:37:57"
+    },
+    {
+      "id": 28,
+      "amount": 4813.72,
+      "category": "shopping",
+      "user_id": 6,
+      "ts": "2023-03-11T13:17:42"
+    },
+    {
+      "id": 29,
+      "amount": 1901.63,
+      "category": "education",
+      "user_id": 1,
+      "ts": "2023-03-17T11:07:08"
+    },
+    {
+      "id": 30,
+      "amount": 2158.32,
+      "category": "health",
+      "user_id": 10,
+      "ts": "2023-06-28T08:44:35"
+    },
+    {
+      "id": 31,
+      "amount": 4979.96,
+      "category": "salary",
+      "user_id": 3,
+      "ts": "2023-02-04T13:56:06"
+    },
+    {
+      "id": 32,
+      "amount": 3740.97,
+      "category": "shopping",
+      "user_id": 3,
+      "ts": "2023-08-11T12:17:06"
+    },
+    {
+      "id": 33,
+      "amount": 900.14,
+      "category": "food",
+      "user_id": 7,
+      "ts": "2023-07-05T00:56:39"
+    },
+    {
+      "id": 34,
+      "amount": 2713.45,
+      "category": "transport",
+      "user_id": 9,
+      "ts": "2023-12-30T06:18:11"
+    },
+    {
+      "id": 35,
+      "amount": 2378.42,
+      "category": "transport",
+      "user_id": 3,
+      "ts": "2023-07-03T18:02:13"
+    },
+    {
+      "id": 36,
+      "amount": 747.71,
+      "category": "education",
+      "user_id": 7,
+      "ts": "2023-05-06T17:08:13"
+    },
+    {
+      "id": 37,
+      "amount": 1849.85,
+      "category": "shopping",
+      "user_id": 8,
+      "ts": "2023-08-08T01:38:38"
+    },
+    {
+      "id": 38,
+      "amount": 358.92,
+      "category": "food",
+      "user_id": 8,
+      "ts": "2023-07-09T20:35:20"
+    },
+    {
+      "id": 39,
+      "amount": 1914.12,
+      "category": "entertainment",
+      "user_id": 3,
+      "ts": "2023-03-21T21:36:54"
+    },
+    {
+      "id": 40,
+      "amount": 2378.6,
+      "category": "health",
+      "user_id": 2,
+      "ts": "2023-06-15T00:26:32"
+    },
+    {
+      "id": 41,
+      "amount": 4603.43,
+      "category": "shopping",
+      "user_id": 5,
+      "ts": "2023-09-22T00:48:05"
+    },
+    {
+      "id": 42,
+      "amount": 4019.99,
+      "category": "salary",
+      "user_id": 7,
+      "ts": "2023-03-02T01:48:35"
+    },
+    {
+      "id": 43,
+      "amount": 823.95,
+      "category": "food",
+      "user_id": 7,
+      "ts": "2023-02-23T18:30:37"
+    },
+    {
+      "id": 44,
+      "amount": 1332.63,
+      "category": "health",
+      "user_id": 2,
+      "ts": "2023-04-14T15:34:08"
+    },
+    {
+      "id": 45,
+      "amount": 1892.46,
+      "category": "shopping",
+      "user_id": 4,
+      "ts": "2023-08-20T15:50:41"
+    },
+    {
+      "id": 46,
+      "amount": 4017.31,
+      "category": "transport",
+      "user_id": 5,
+      "ts": "2023-11-08T10:32:55"
+    },
+    {
+      "id": 47,
+      "amount": 1753.83,
+      "category": "food",
+      "user_id": 10,
+      "ts": "2023-07-31T14:13:08"
+    },
+    {
+      "id": 48,
+      "amount": 4575.89,
+      "category": "bills",
+      "user_id": 10,
+      "ts": "2023-02-11T08:56:24"
+    },
+    {
+      "id": 49,
+      "amount": 3998.63,
+      "category": "entertainment",
+      "user_id": 2,
+      "ts": "2023-04-15T16:36:37"
+    },
+    {
+      "id": 50,
+      "amount": 3913.04,
+      "category": "food",
+      "user_id": 2,
+      "ts": "2023-03-02T09:35:34"
+    },
+    {
+      "id": 51,
+      "amount": 3768.09,
+      "category": "shopping",
+      "user_id": 1,
+      "ts": "2023-12-23T19:48:48"
+    },
+    {
+      "id": 52,
+      "amount": 1497.14,
+      "category": "shopping",
+      "user_id": 3,
+      "ts": "2023-07-10T08:03:50"
+    },
+    {
+      "id": 53,
+      "amount": 1598.93,
+      "category": "health",
+      "user_id": 5,
+      "ts": "2023-07-24T17:46:15"
+    },
+    {
+      "id": 54,
+      "amount": 2476.46,
+      "category": "bills",
+      "user_id": 9,
+      "ts": "2023-05-22T12:11:40"
+    },
+    {
+      "id": 55,
+      "amount": 4300.25,
+      "category": "shopping",
+      "user_id": 4,
+      "ts": "2023-04-24T01:38:26"
+    },
+    {
+      "id": 56,
+      "amount": 2310.68,
+      "category": "entertainment",
+      "user_id": 2,
+      "ts": "2023-07-13T05:12:29"
+    },
+    {
+      "id": 57,
+      "amount": 4499.72,
+      "category": "shopping",
+      "user_id": 4,
+      "ts": "2023-03-22T16:40:09"
+    },
+    {
+      "id": 58,
+      "amount": 1465.09,
+      "category": "bills",
+      "user_id": 5,
+      "ts": "2023-06-14T18:25:00"
+    },
+    {
+      "id": 59,
+      "amount": 4474.22,
+      "category": "education",
+      "user_id": 7,
+      "ts": "2023-04-04T20:07:57"
+    },
+    {
+      "id": 60,
+      "amount": 1769.31,
+      "category": "shopping",
+      "user_id": 5,
+      "ts": "2023-01-24T22:58:39"
+    },
+    {
+      "id": 61,
+      "amount": 2825.01,
+      "category": "education",
+      "user_id": 4,
+      "ts": "2023-08-30T22:50:06"
+    },
+    {
+      "id": 62,
+      "amount": 3251.95,
+      "category": "food",
+      "user_id": 4,
+      "ts": "2023-12-30T14:45:53"
+    },
+    {
+      "id": 63,
+      "amount": 663.87,
+      "category": "salary",
+      "user_id": 4,
+      "ts": "2023-06-25T07:10:32"
+    },
+    {
+      "id": 64,
+      "amount": 3899.0,
+      "category": "shopping",
+      "user_id": 4,
+      "ts": "2023-12-13T21:58:43"
+    },
+    {
+      "id": 65,
+      "amount": 4718.8,
+      "category": "health",
+      "user_id": 7,
+      "ts": "2023-07-27T01:17:34"
+    },
+    {
+      "id": 66,
+      "amount": 4510.03,
+      "category": "entertainment",
+      "user_id": 5,
+      "ts": "2023-01-29T05:12:15"
+    },
+    {
+      "id": 67,
+      "amount": 516.04,
+      "category": "bills",
+      "user_id": 10,
+      "ts": "2023-06-28T14:13:14"
+    },
+    {
+      "id": 68,
+      "amount": 3540.47,
+      "category": "salary",
+      "user_id": 6,
+      "ts": "2023-08-16T17:28:15"
+    },
+    {
+      "id": 69,
+      "amount": 3797.99,
+      "category": "education",
+      "user_id": 1,
+      "ts": "2023-03-26T16:06:59"
+    },
+    {
+      "id": 70,
+      "amount": 35.36,
+      "category": "salary",
+      "user_id": 10,
+      "ts": "2023-10-27T07:30:24"
+    },
+    {
+      "id": 71,
+      "amount": 2078.87,
+      "category": "shopping",
+      "user_id": 2,
+      "ts": "2023-04-30T02:20:15"
+    },
+    {
+      "id": 72,
+      "amount": 2654.33,
+      "category": "health",
+      "user_id": 4,
+      "ts": "2023-11-09T08:24:35"
+    },
+    {
+      "id": 73,
+      "amount": 2475.76,
+      "category": "bills",
+      "user_id": 3,
+      "ts": "2023-02-25T22:52:19"
+    },
+    {
+      "id": 74,
+      "amount": 2962.6,
+      "category": "education",
+      "user_id": 5,
+      "ts": "2023-07-05T19:04:58"
+    },
+    {
+      "id": 75,
+      "amount": 2042.32,
+      "category": "entertainment",
+      "user_id": 9,
+      "ts": "2023-06-02T16:58:59"
+    },
+    {
+      "id": 76,
+      "amount": 4557.89,
+      "category": "salary",
+      "user_id": 1,
+      "ts": "2023-07-23T12:38:33"
+    },
+    {
+      "id": 77,
+      "amount": 2758.73,
+      "category": "food",
+      "user_id": 3,
+      "ts": "2023-12-09T17:26:46"
+    },
+    {
+      "id": 78,
+      "amount": 596.42,
+      "category": "transport",
+      "user_id": 2,
+      "ts": "2023-12-27T21:54:00"
+    },
+    {
+      "id": 79,
+      "amount": 620.11,
+      "category": "bills",
+      "user_id": 7,
+      "ts": "2023-04-15T21:54:07"
+    },
+    {
+      "id": 80,
+      "amount": 1716.39,
+      "category": "shopping",
+      "user_id": 3,
+      "ts": "2023-03-11T18:13:07"
+    },
+    {
+      "id": 81,
+      "amount": 4888.12,
+      "category": "salary",
+      "user_id": 4,
+      "ts": "2023-06-13T09:11:08"
+    },
+    {
+      "id": 82,
+      "amount": 116.13,
+      "category": "food",
+      "user_id": 3,
+      "ts": "2023-03-12T08:17:32"
+    },
+    {
+      "id": 83,
+      "amount": 786.17,
+      "category": "education",
+      "user_id": 4,
+      "ts": "2023-07-12T16:33:52"
+    },
+    {
+      "id": 84,
+      "amount": 2915.33,
+      "category": "bills",
+      "user_id": 1,
+      "ts": "2023-04-25T11:45:53"
+    },
+    {
+      "id": 85,
+      "amount": 1125.61,
+      "category": "health",
+      "user_id": 1,
+      "ts": "2023-04-23T19:45:04"
+    },
+    {
+      "id": 86,
+      "amount": 4794.58,
+      "category": "entertainment",
+      "user_id": 8,
+      "ts": "2023-11-03T20:45:07"
+    },
+    {
+      "id": 87,
+      "amount": 2176.01,
+      "category": "entertainment",
+      "user_id": 7,
+      "ts": "2023-09-05T15:33:10"
+    },
+    {
+      "id": 88,
+      "amount": 3857.79,
+      "category": "transport",
+      "user_id": 5,
+      "ts": "2023-07-26T23:21:18"
+    },
+    {
+      "id": 89,
+      "amount": 4821.45,
+      "category": "entertainment",
+      "user_id": 7,
+      "ts": "2023-07-28T14:47:06"
+    },
+    {
+      "id": 90,
+      "amount": 3882.62,
+      "category": "shopping",
+      "user_id": 6,
+      "ts": "2023-09-18T17:07:15"
+    },
+    {
+      "id": 91,
+      "amount": 2812.54,
+      "category": "food",
+      "user_id": 5,
+      "ts": "2023-12-09T03:07:48"
+    },
+    {
+      "id": 92,
+      "amount": 4563.5,
+      "category": "education",
+      "user_id": 9,
+      "ts": "2023-03-20T14:26:02"
+    },
+    {
+      "id": 93,
+      "amount": 2204.61,
+      "category": "food",
+      "user_id": 8,
+      "ts": "2023-09-16T07:02:48"
+    },
+    {
+      "id": 94,
+      "amount": 3613.38,
+      "category": "salary",
+      "user_id": 7,
+      "ts": "2023-04-18T08:15:59"
+    },
+    {
+      "id": 95,
+      "amount": 3828.11,
+      "category": "health",
+      "user_id": 4,
+      "ts": "2023-04-27T02:16:57"
+    },
+    {
+      "id": 96,
+      "amount": 2130.12,
+      "category": "food",
+      "user_id": 4,
+      "ts": "2023-04-05T00:23:51"
+    },
+    {
+      "id": 97,
+      "amount": 1153.1,
+      "category": "health",
+      "user_id": 9,
+      "ts": "2023-04-10T04:12:21"
+    },
+    {
+      "id": 98,
+      "amount": 3001.49,
+      "category": "bills",
+      "user_id": 9,
+      "ts": "2023-09-01T10:44:08"
+    },
+    {
+      "id": 99,
+      "amount": 2615.9,
+      "category": "shopping",
+      "user_id": 6,
+      "ts": "2023-10-14T00:45:39"
+    },
+    {
+      "id": 0,
+      "amount": 674.37,
+      "category": "health",
+      "user_id": 2,
+      "ts": "2023-08-10T13:27:09"
+    },
+    {
+      "id": 1,
+      "amount": 87.43,
+      "category": "entertainment",
+      "user_id": 5,
+      "ts": "2023-12-16T07:34:35"
+    },
+    {
+      "id": 2,
+      "amount": 431.12,
+      "category": "shopping",
+      "user_id": 5,
+      "ts": "2023-06-20T20:21:14"
+    },
+    {
+      "id": 3,
+      "amount": 567.78,
+      "category": "salary",
+      "user_id": 8,
+      "ts": "2023-01-01T03:52:10"
+    },
+    {
+      "id": 4,
+      "amount": 2838.91,
+      "category": "food",
+      "user_id": 7,
+      "ts": "2023-03-03T05:41:16"
+    },
+    {
+      "id": 5,
+      "amount": 3781.61,
+      "category": "shopping",
+      "user_id": 5,
+      "ts": "2023-12-09T17:04:43"
+    },
+    {
+      "id": 6,
+      "amount": 3103.25,
+      "category": "entertainment",
+      "user_id": 2,
+      "ts": "2023-02-21T14:28:05"
+    },
+    {
+      "id": 7,
+      "amount": 4200.6,
+      "category": "salary",
+      "user_id": 1,
+      "ts": "2023-01-13T11:30:08"
+    },
+    {
+      "id": 8,
+      "amount": 2444.41,
+      "category": "education",
+      "user_id": 3,
+      "ts": "2023-11-28T15:43:03"
+    },
+    {
+      "id": 9,
+      "amount": 1233.24,
+      "category": "salary",
+      "user_id": 3,
+      "ts": "2023-03-25T23:43:20"
+    },
+    {
+      "id": 10,
+      "amount": 4831.54,
+      "category": "health",
+      "user_id": 7,
+      "ts": "2023-12-16T21:44:30"
+    },
+    {
+      "id": 11,
+      "amount": 3177.66,
+      "category": "entertainment",
+      "user_id": 3,
+      "ts": "2023-07-25T09:25:43"
+    },
+    {
+      "id": 12,
+      "amount": 3211.78,
+      "category": "salary",
+      "user_id": 1,
+      "ts": "2023-03-24T08:58:33"
+    },
+    {
+      "id": 13,
+      "amount": 3101.38,
+      "category": "transport",
+      "user_id": 5,
+      "ts": "2023-05-19T22:22:47"
+    },
+    {
+      "id": 14,
+      "amount": 4833.93,
+      "category": "bills",
+      "user_id": 6,
+      "ts": "2023-02-01T16:41:00"
+    },
+    {
+      "id": 15,
+      "amount": 1737.02,
+      "category": "entertainment",
+      "user_id": 4,
+      "ts": "2023-05-28T20:41:05"
+    },
+    {
+      "id": 16,
+      "amount": 2486.0,
+      "category": "transport",
+      "user_id": 6,
+      "ts": "2023-12-22T22:16:50"
+    },
+    {
+      "id": 17,
+      "amount": 4113.06,
+      "category": "health",
+      "user_id": 2,
+      "ts": "2023-04-11T23:55:21"
+    },
+    {
+      "id": 18,
+      "amount": 1158.88,
+      "category": "education",
+      "user_id": 7,
+      "ts": "2023-05-14T15:59:41"
+    },
+    {
+      "id": 19,
+      "amount": 3627.2,
+      "category": "shopping",
+      "user_id": 7,
+      "ts": "2023-09-16T07:05:52"
+    },
+    {
+      "id": 20,
+      "amount": 3458.35,
+      "category": "entertainment",
+      "user_id": 5,
+      "ts": "2023-03-24T09:46:00"
+    },
+    {
+      "id": 21,
+      "amount": 1386.75,
+      "category": "salary",
+      "user_id": 5,
+      "ts": "2023-03-20T06:19:15"
+    },
+    {
+      "id": 22,
+      "amount": 4556.37,
+      "category": "health",
+      "user_id": 5,
+      "ts": "2023-06-23T22:06:56"
+    },
+    {
+      "id": 23,
+      "amount": 9.45,
+      "category": "bills",
+      "user_id": 4,
+      "ts": "2023-07-22T00:39:25"
+    },
+    {
+      "id": 24,
+      "amount": 4666.76,
+      "category": "shopping",
+      "user_id": 6,
+      "ts": "2023-09-13T19:13:43"
+    },
+    {
+      "id": 25,
+      "amount": 331.78,
+      "category": "bills",
+      "user_id": 2,
+      "ts": "2023-12-25T08:43:30"
+    },
+    {
+      "id": 26,
+      "amount": 3569.65,
+      "category": "transport",
+      "user_id": 7,
+      "ts": "2023-08-13T00:14:52"
+    },
+    {
+      "id": 27,
+      "amount": 3545.35,
+      "category": "entertainment",
+      "user_id": 9,
+      "ts": "2023-11-23T21:37:57"
+    },
+    {
+      "id": 28,
+      "amount": 4813.72,
+      "category": "shopping",
+      "user_id": 6,
+      "ts": "2023-03-11T13:17:42"
+    },
+    {
+      "id": 29,
+      "amount": 1901.63,
+      "category": "education",
+      "user_id": 1,
+      "ts": "2023-03-17T11:07:08"
+    },
+    {
+      "id": 30,
+      "amount": 2158.32,
+      "category": "health",
+      "user_id": 10,
+      "ts": "2023-06-28T08:44:35"
+    },
+    {
+      "id": 31,
+      "amount": 4979.96,
+      "category": "salary",
+      "user_id": 3,
+      "ts": "2023-02-04T13:56:06"
+    },
+    {
+      "id": 32,
+      "amount": 3740.97,
+      "category": "shopping",
+      "user_id": 3,
+      "ts": "2023-08-11T12:17:06"
+    },
+    {
+      "id": 33,
+      "amount": 900.14,
+      "category": "food",
+      "user_id": 7,
+      "ts": "2023-07-05T00:56:39"
+    },
+    {
+      "id": 34,
+      "amount": 2713.45,
+      "category": "transport",
+      "user_id": 9,
+      "ts": "2023-12-30T06:18:11"
+    },
+    {
+      "id": 35,
+      "amount": 2378.42,
+      "category": "transport",
+      "user_id": 3,
+      "ts": "2023-07-03T18:02:13"
+    },
+    {
+      "id": 36,
+      "amount": 747.71,
+      "category": "education",
+      "user_id": 7,
+      "ts": "2023-05-06T17:08:13"
+    },
+    {
+      "id": 37,
+      "amount": 1849.85,
+      "category": "shopping",
+      "user_id": 8,
+      "ts": "2023-08-08T01:38:38"
+    },
+    {
+      "id": 38,
+      "amount": 358.92,
+      "category": "food",
+      "user_id": 8,
+      "ts": "2023-07-09T20:35:20"
+    },
+    {
+      "id": 39,
+      "amount": 1914.12,
+      "category": "entertainment",
+      "user_id": 3,
+      "ts": "2023-03-21T21:36:54"
+    },
+    {
+      "id": 40,
+      "amount": 2378.6,
+      "category": "health",
+      "user_id": 2,
+      "ts": "2023-06-15T00:26:32"
+    },
+    {
+      "id": 41,
+      "amount": 4603.43,
+      "category": "shopping",
+      "user_id": 5,
+      "ts": "2023-09-22T00:48:05"
+    },
+    {
+      "id": 42,
+      "amount": 4019.99,
+      "category": "salary",
+      "user_id": 7,
+      "ts": "2023-03-02T01:48:35"
+    },
+    {
+      "id": 43,
+      "amount": 823.95,
+      "category": "food",
+      "user_id": 7,
+      "ts": "2023-02-23T18:30:37"
+    },
+    {
+      "id": 44,
+      "amount": 1332.63,
+      "category": "health",
+      "user_id": 2,
+      "ts": "2023-04-14T15:34:08"
+    },
+    {
+      "id": 45,
+      "amount": 1892.46,
+      "category": "shopping",
+      "user_id": 4,
+      "ts": "2023-08-20T15:50:41"
+    },
+    {
+      "id": 46,
+      "amount": 4017.31,
+      "category": "transport",
+      "user_id": 5,
+      "ts": "2023-11-08T10:32:55"
+    },
+    {
+      "id": 47,
+      "amount": 1753.83,
+      "category": "food",
+      "user_id": 10,
+      "ts": "2023-07-31T14:13:08"
+    },
+    {
+      "id": 48,
+      "amount": 4575.89,
+      "category": "bills",
+      "user_id": 10,
+      "ts": "2023-02-11T08:56:24"
+    },
+    {
+      "id": 49,
+      "amount": 3998.63,
+      "category": "entertainment",
+      "user_id": 2,
+      "ts": "2023-04-15T16:36:37"
+    },
+    {
+      "id": 50,
+      "amount": 3913.04,
+      "category": "food",
+      "user_id": 2,
+      "ts": "2023-03-02T09:35:34"
+    },
+    {
+      "id": 51,
+      "amount": 3768.09,
+      "category": "shopping",
+      "user_id": 1,
+      "ts": "2023-12-23T19:48:48"
+    },
+    {
+      "id": 52,
+      "amount": 1497.14,
+      "category": "shopping",
+      "user_id": 3,
+      "ts": "2023-07-10T08:03:50"
+    },
+    {
+      "id": 53,
+      "amount": 1598.93,
+      "category": "health",
+      "user_id": 5,
+      "ts": "2023-07-24T17:46:15"
+    },
+    {
+      "id": 54,
+      "amount": 2476.46,
+      "category": "bills",
+      "user_id": 9,
+      "ts": "2023-05-22T12:11:40"
+    },
+    {
+      "id": 55,
+      "amount": 4300.25,
+      "category": "shopping",
+      "user_id": 4,
+      "ts": "2023-04-24T01:38:26"
+    },
+    {
+      "id": 56,
+      "amount": 2310.68,
+      "category": "entertainment",
+      "user_id": 2,
+      "ts": "2023-07-13T05:12:29"
+    },
+    {
+      "id": 57,
+      "amount": 4499.72,
+      "category": "shopping",
+      "user_id": 4,
+      "ts": "2023-03-22T16:40:09"
+    },
+    {
+      "id": 58,
+      "amount": 1465.09,
+      "category": "bills",
+      "user_id": 5,
+      "ts": "2023-06-14T18:25:00"
+    },
+    {
+      "id": 59,
+      "amount": 4474.22,
+      "category": "education",
+      "user_id": 7,
+      "ts": "2023-04-04T20:07:57"
+    },
+    {
+      "id": 60,
+      "amount": 1769.31,
+      "category": "shopping",
+      "user_id": 5,
+      "ts": "2023-01-24T22:58:39"
+    },
+    {
+      "id": 61,
+      "amount": 2825.01,
+      "category": "education",
+      "user_id": 4,
+      "ts": "2023-08-30T22:50:06"
+    },
+    {
+      "id": 62,
+      "amount": 3251.95,
+      "category": "food",
+      "user_id": 4,
+      "ts": "2023-12-30T14:45:53"
+    },
+    {
+      "id": 63,
+      "amount": 663.87,
+      "category": "salary",
+      "user_id": 4,
+      "ts": "2023-06-25T07:10:32"
+    },
+    {
+      "id": 64,
+      "amount": 3899.0,
+      "category": "shopping",
+      "user_id": 4,
+      "ts": "2023-12-13T21:58:43"
+    },
+    {
+      "id": 65,
+      "amount": 4718.8,
+      "category": "health",
+      "user_id": 7,
+      "ts": "2023-07-27T01:17:34"
+    },
+    {
+      "id": 66,
+      "amount": 4510.03,
+      "category": "entertainment",
+      "user_id": 5,
+      "ts": "2023-01-29T05:12:15"
+    },
+    {
+      "id": 67,
+      "amount": 516.04,
+      "category": "bills",
+      "user_id": 10,
+      "ts": "2023-06-28T14:13:14"
+    },
+    {
+      "id": 68,
+      "amount": 3540.47,
+      "category": "salary",
+      "user_id": 6,
+      "ts": "2023-08-16T17:28:15"
+    },
+    {
+      "id": 69,
+      "amount": 3797.99,
+      "category": "education",
+      "user_id": 1,
+      "ts": "2023-03-26T16:06:59"
+    },
+    {
+      "id": 70,
+      "amount": 35.36,
+      "category": "salary",
+      "user_id": 10,
+      "ts": "2023-10-27T07:30:24"
+    },
+    {
+      "id": 71,
+      "amount": 2078.87,
+      "category": "shopping",
+      "user_id": 2,
+      "ts": "2023-04-30T02:20:15"
+    },
+    {
+      "id": 72,
+      "amount": 2654.33,
+      "category": "health",
+      "user_id": 4,
+      "ts": "2023-11-09T08:24:35"
+    },
+    {
+      "id": 73,
+      "amount": 2475.76,
+      "category": "bills",
+      "user_id": 3,
+      "ts": "2023-02-25T22:52:19"
+    },
+    {
+      "id": 74,
+      "amount": 2962.6,
+      "category": "education",
+      "user_id": 5,
+      "ts": "2023-07-05T19:04:58"
+    },
+    {
+      "id": 75,
+      "amount": 2042.32,
+      "category": "entertainment",
+      "user_id": 9,
+      "ts": "2023-06-02T16:58:59"
+    },
+    {
+      "id": 76,
+      "amount": 4557.89,
+      "category": "salary",
+      "user_id": 1,
+      "ts": "2023-07-23T12:38:33"
+    },
+    {
+      "id": 77,
+      "amount": 2758.73,
+      "category": "food",
+      "user_id": 3,
+      "ts": "2023-12-09T17:26:46"
+    },
+    {
+      "id": 78,
+      "amount": 596.42,
+      "category": "transport",
+      "user_id": 2,
+      "ts": "2023-12-27T21:54:00"
+    },
+    {
+      "id": 79,
+      "amount": 620.11,
+      "category": "bills",
+      "user_id": 7,
+      "ts": "2023-04-15T21:54:07"
+    },
+    {
+      "id": 80,
+      "amount": 1716.39,
+      "category": "shopping",
+      "user_id": 3,
+      "ts": "2023-03-11T18:13:07"
+    },
+    {
+      "id": 81,
+      "amount": 4888.12,
+      "category": "salary",
+      "user_id": 4,
+      "ts": "2023-06-13T09:11:08"
+    },
+    {
+      "id": 82,
+      "amount": 116.13,
+      "category": "food",
+      "user_id": 3,
+      "ts": "2023-03-12T08:17:32"
+    },
+    {
+      "id": 83,
+      "amount": 786.17,
+      "category": "education",
+      "user_id": 4,
+      "ts": "2023-07-12T16:33:52"
+    },
+    {
+      "id": 84,
+      "amount": 2915.33,
+      "category": "bills",
+      "user_id": 1,
+      "ts": "2023-04-25T11:45:53"
+    },
+    {
+      "id": 85,
+      "amount": 1125.61,
+      "category": "health",
+      "user_id": 1,
+      "ts": "2023-04-23T19:45:04"
+    },
+    {
+      "id": 86,
+      "amount": 4794.58,
+      "category": "entertainment",
+      "user_id": 8,
+      "ts": "2023-11-03T20:45:07"
+    },
+    {
+      "id": 87,
+      "amount": 2176.01,
+      "category": "entertainment",
+      "user_id": 7,
+      "ts": "2023-09-05T15:33:10"
+    },
+    {
+      "id": 88,
+      "amount": 3857.79,
+      "category": "transport",
+      "user_id": 5,
+      "ts": "2023-07-26T23:21:18"
+    },
+    {
+      "id": 89,
+      "amount": 4821.45,
+      "category": "entertainment",
+      "user_id": 7,
+      "ts": "2023-07-28T14:47:06"
+    },
+    {
+      "id": 90,
+      "amount": 3882.62,
+      "category": "shopping",
+      "user_id": 6,
+      "ts": "2023-09-18T17:07:15"
+    },
+    {
+      "id": 91,
+      "amount": 2812.54,
+      "category": "food",
+      "user_id": 5,
+      "ts": "2023-12-09T03:07:48"
+    },
+    {
+      "id": 92,
+      "amount": 4563.5,
+      "category": "education",
+      "user_id": 9,
+      "ts": "2023-03-20T14:26:02"
+    },
+    {
+      "id": 93,
+      "amount": 2204.61,
+      "category": "food",
+      "user_id": 8,
+      "ts": "2023-09-16T07:02:48"
+    },
+    {
+      "id": 94,
+      "amount": 3613.38,
+      "category": "salary",
+      "user_id": 7,
+      "ts": "2023-04-18T08:15:59"
+    },
+    {
+      "id": 95,
+      "amount": 3828.11,
+      "category": "health",
+      "user_id": 4,
+      "ts": "2023-04-27T02:16:57"
+    },
+    {
+      "id": 96,
+      "amount": 2130.12,
+      "category": "food",
+      "user_id": 4,
+      "ts": "2023-04-05T00:23:51"
+    },
+    {
+      "id": 97,
+      "amount": 1153.1,
+      "category": "health",
+      "user_id": 9,
+      "ts": "2023-04-10T04:12:21"
+    },
+    {
+      "id": 98,
+      "amount": 3001.49,
+      "category": "bills",
+      "user_id": 9,
+      "ts": "2023-09-01T10:44:08"
+    },
+    {
+      "id": 99,
+      "amount": 2615.9,
+      "category": "shopping",
+      "user_id": 6,
+      "ts": "2023-10-14T00:45:39"
+    }
+  ],
+  "expand_factor": 100,
+  "heavy_agg": true
+}

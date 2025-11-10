@@ -1,0 +1,11 @@
+server:
+  # enable web ui
+  enableMetrics: yes
+  api: yes
+
+paths:
+  all:
+    publishUser: ""
+    publishPass: ""
+    readUser: ""
+    readPass: ""

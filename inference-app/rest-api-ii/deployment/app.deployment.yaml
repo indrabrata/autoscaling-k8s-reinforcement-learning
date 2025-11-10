@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resource-intensive
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resource-intensive
+  template:
+    metadata:
+      labels:
+        app: resource-intensive
+    spec:
+      containers:
+        - name: resource-intensive
+          image: ndraaa/resource-intensive-app-ii:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: resource-intensive
+  labels:
+    app: resource-intensive
+    service: resource-intensive
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "80"
+    prometheus.io/path: "/metrics"
+spec:
+  selector:
+    app: resource-intensive
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

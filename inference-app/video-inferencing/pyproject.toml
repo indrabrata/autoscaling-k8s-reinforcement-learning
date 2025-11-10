@@ -1,0 +1,12 @@
+[project]
+name = "video-inferencing"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "cv>=1.0.0",
+    "psutil>=7.0.0",
+    "python-dotenv>=1.1.1",
+    "ultralytics>=8.3.195",
+]

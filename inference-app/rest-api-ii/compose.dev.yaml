@@ -1,0 +1,14 @@
+name: resource-intensive-app-ii
+services:
+  app:
+    image: ndraaa/resource-intesive-app-ii:latest
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        reservations:
+          cpus: "0.5"        
+          memory: 512M     
+        limits:
+          cpus: "1.0"        
+          memory: 1G
