@@ -33,7 +33,7 @@ venv.bak/
 *.pth
 *.pt
 *.ckpt
-model/*/
+model/
 models/
 checkpoints/
 

@@ -11,8 +11,6 @@ from .fuzzy import Fuzzy
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-
-
 class QLearningFuzzy:
     def __init__(
         self,
@@ -39,7 +37,7 @@ class QLearningFuzzy:
         self.logger = logger or Logger(__name__)
 
         self.logger.info("Initialized QFuzzyHybrid agent")
-        self.logger.info(f"Agent parameters: {self.__dict__}")
+        self.logger.debug(f"Agent parameters: {self.__dict__}")
 
     def get_state_key(self, observation: dict) -> Tuple[str, str, str]:
         response_time_raw = observation["response_time"]

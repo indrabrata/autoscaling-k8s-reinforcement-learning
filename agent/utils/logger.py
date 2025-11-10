@@ -44,7 +44,7 @@ def setup_logger(
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(numeric_level)
     console_handler.setFormatter(formatter)
 
     def emit_utf8(self, record):

@@ -2,6 +2,7 @@ import ast
 import os
 import time
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from database import InfluxDB
@@ -12,6 +13,37 @@ from trainer import Trainer
 from utils import setup_logger
 
 load_dotenv()
+
+
+def find_latest_checkpoint(algorithm: str) -> Optional[str]:
+    """
+    Find the latest checkpoint for the given algorithm.
+    Searches in model/{algorithm_type}/**/checkpoints/ and model/{algorithm_type}/**/interrupted/
+    Returns the most recent checkpoint path or None if not found.
+    """
+    model_type = "qlearningfuzzy" if algorithm == "Q-LEARNING-FUZZY" else "qlearning"
+    model_base = Path("model") / model_type
+
+    if not model_base.exists():
+        return None
+
+    # Search for all checkpoint files
+    checkpoint_files = []
+
+    # Search in checkpoints directories
+    for checkpoint_file in model_base.rglob("checkpoints/*.pkl"):
+        checkpoint_files.append(checkpoint_file)
+
+    # Search in interrupted directories
+    for interrupted_file in model_base.rglob("interrupted/*.pkl"):
+        checkpoint_files.append(interrupted_file)
+
+    if not checkpoint_files:
+        return None
+
+    # Sort by modification time, most recent first
+    latest_checkpoint = max(checkpoint_files, key=lambda p: p.stat().st_mtime)
+    return str(latest_checkpoint)
 
 if __name__ == "__main__":
     start_time = int(time.time())
@@ -38,7 +70,7 @@ if __name__ == "__main__":
         logger.warning("Invalid METRICS_ENDPOINTS_METHOD format, using default")
         metrics_endpoints_method = [["/", "GET"], ["/docs", "GET"]]
 
-    choose_algorithm = os.getenv("ALGORITHM", "Q").upper()
+    choose_algorithm = os.getenv("ALGORITHM", "Q-LEARNING").upper()
 
     env = KubernetesEnv(
         min_replicas=int(os.getenv("MIN_REPLICAS", "1")),
@@ -94,12 +126,37 @@ if __name__ == "__main__":
 
     note = os.getenv("NOTE", "default")
 
+    # Handle AUTO_RESUME and RESUME logic
+    auto_resume = ast.literal_eval(os.getenv("AUTO_RESUME", "False"))
+    resume = ast.literal_eval(os.getenv("RESUME", "False"))
+    resume_path = os.getenv("RESUME_PATH", "")
+
+    # Determine final resume settings
+    final_resume = False
+    final_resume_path = ""
+
+    if auto_resume:
+        logger.info("AUTO_RESUME is enabled. Searching for latest checkpoint...")
+        latest_checkpoint = find_latest_checkpoint(choose_algorithm)
+        if latest_checkpoint:
+            final_resume = True
+            final_resume_path = latest_checkpoint
+            logger.info(f"Found latest checkpoint: {latest_checkpoint}")
+        else:
+            logger.warning("No checkpoint found. Starting from scratch.")
+    elif resume and resume_path:
+        final_resume = True
+        final_resume_path = resume_path
+        logger.info(f"Resuming from specified path: {resume_path}")
+    elif resume and not resume_path:
+        logger.warning("RESUME is True but RESUME_PATH is empty. Starting from scratch.")
+
     trainer = Trainer(
         agent=algorithm,
         env=env,
         logger=logger,
-        resume=ast.literal_eval(os.getenv("RESUME", "False")),
-        resume_path=os.getenv("RESUME_PATH", ""),
+        resume=final_resume,
+        resume_path=final_resume_path,
         reset_epsilon=ast.literal_eval(os.getenv("RESET_EPSILON", "True")),
         change_epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.90)),
     )

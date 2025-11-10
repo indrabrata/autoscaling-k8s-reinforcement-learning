@@ -1,7 +1,7 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: ecom-api-hpa
+  name: resource-intensive-hpa
   namespace: default
 spec:
   scaleTargetRef:

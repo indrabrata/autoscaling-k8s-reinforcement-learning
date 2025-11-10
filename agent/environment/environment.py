@@ -1,12 +1,13 @@
 import math
 import time
 from logging import Logger
-from typing import Optional
+from typing import Dict, Optional, Tuple
 
 from database.influxdb import InfluxDB
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
 from prometheus_api_client import PrometheusConnect
+from rl.fuzzy import Fuzzy
 from utils import get_metrics, wait_for_pods_ready
 
 class KubernetesEnv:
@@ -82,10 +83,15 @@ class KubernetesEnv:
         self.request_rate = 0.0
         self.previous_request_rate = 0.0
         self.request_rate_trend = 0.0
-        self.replica_change = 0
+        self.action_change = 0
+
+        if self.algorithm == "Q-LEARNING-FUZZY":
+            self.fuzzy = Fuzzy(logger=logger)
+        else:
+            self.fuzzy = None
 
         self.logger.info("Initialized KubernetesEnv environment")
-        self.logger.info(f"Environment configuration: {self.__dict__}")
+        self.logger.debug(f"Environment configuration: {self.__dict__}")
 
     def _scale(self) -> None:
         HTTP_INTERNAL_SERVER_ERROR = 500
@@ -171,12 +177,131 @@ class KubernetesEnv:
             f"Proceeding with current replica state to avoid blocking training."
         )
 
-    def _calculate_reward(self) -> float:
+    def _calculate_reward_qlearning(self) -> Tuple[float, Dict[str, float]]:
+        """Calculate reward for Q-Learning algorithm using direct threshold evaluations"""
         if self.response_time is None or math.isnan(self.response_time) or math.isinf(self.response_time):
-            self.response_time = 0.0        
-        
-        response_time_percentage = (self.response_time / self.max_response_time) * 100.0
+            self.response_time = 0.0
 
+        response_time_percentage = (self.response_time / self.max_response_time) * 100.0
+        replica_ratio = (self.replica_state - self.min_replicas) / self.range_replicas
+
+        # Evaluate state quality using direct thresholds (similar to fuzzy but with real values)
+
+        # OPTIMAL STATE: Resources well-utilized, response time excellent
+        # CPU/MEM in target range, response time low
+        cpu_in_range = self.min_cpu <= self.cpu_usage <= self.max_cpu
+        mem_in_range = self.min_memory <= self.memory_usage <= self.max_memory
+        resp_excellent = response_time_percentage <= 60.0  # < 60% of max
+        resp_good = response_time_percentage <= 80.0  # < 80% of max
+
+        if cpu_in_range and mem_in_range and resp_excellent:
+            optimal_score = 1.0
+        elif cpu_in_range and mem_in_range and resp_good:
+            optimal_score = 0.7
+        elif (self.min_cpu <= self.cpu_usage <= self.max_cpu * 1.1) and \
+             (self.min_memory <= self.memory_usage <= self.max_memory * 1.1) and resp_good:
+            optimal_score = 0.5
+        else:
+            optimal_score = 0.0
+
+        # BALANCED STATE: Stable and efficient operation
+        # Metrics moderate, response time acceptable
+        cpu_moderate = 40 <= self.cpu_usage <= 70
+        mem_moderate = 40 <= self.memory_usage <= 70
+        resp_acceptable = response_time_percentage <= 90.0
+
+        if cpu_moderate and mem_moderate and resp_good:
+            balanced_score = 1.0
+        elif cpu_moderate and mem_moderate and resp_acceptable:
+            balanced_score = 0.7
+        elif (30 <= self.cpu_usage <= 80) and (30 <= self.memory_usage <= 80) and resp_acceptable:
+            balanced_score = 0.5
+        else:
+            balanced_score = 0.0
+
+        # WASTEFUL STATE: Over-provisioned, resources under-utilized
+        # CPU/MEM very low, response time low = wasting resources
+        cpu_very_low = self.cpu_usage < self.min_cpu * 0.5  # Less than half of min threshold
+        mem_very_low = self.memory_usage < self.min_memory * 0.5
+        cpu_low = self.cpu_usage < self.min_cpu
+        mem_low = self.memory_usage < self.min_memory
+
+        if cpu_very_low and mem_very_low and resp_excellent:
+            wasteful_score = 1.0  # Severe waste
+        elif (cpu_very_low or mem_very_low) and resp_excellent:
+            wasteful_score = 0.8
+        elif cpu_low and mem_low and resp_good:
+            wasteful_score = 0.6
+        elif (cpu_low or mem_low) and resp_excellent:
+            wasteful_score = 0.4
+        else:
+            wasteful_score = 0.0
+
+        # CRITICAL STATE: Under-provisioned, performance degrading
+        # Response time very high, or CPU/MEM maxed out
+        cpu_very_high = self.cpu_usage > self.max_cpu * 1.1  # Exceeding max by 10%
+        mem_very_high = self.memory_usage > self.max_memory * 1.1
+        cpu_high = self.cpu_usage > self.max_cpu
+        mem_high = self.memory_usage > self.max_memory
+        resp_critical = response_time_percentage > 120.0  # > 120% of max
+        resp_high = response_time_percentage > 100.0
+
+        if resp_critical:
+            critical_score = 1.0  # Very critical
+        elif (cpu_very_high or mem_very_high) and resp_high:
+            critical_score = 1.0
+        elif resp_high and (cpu_high or mem_high):
+            critical_score = 0.8
+        elif (cpu_very_high or mem_very_high):
+            critical_score = 0.6
+        elif resp_high:
+            critical_score = 0.5
+        else:
+            critical_score = 0.0
+
+        # Calculate reward based on state quality
+        optimal_contribution = optimal_score * 1.0
+        balanced_contribution = balanced_score * 0.7
+        wasteful_penalty = wasteful_score * self.cost_weight * 1.5
+        critical_penalty = critical_score * (self.response_time_weight + self.cpu_memory_weight)
+
+        positive_contribution = optimal_contribution + balanced_contribution
+        negative_contribution = wasteful_penalty + critical_penalty
+
+        # Base reward formula
+        if negative_contribution > 0:
+            reward = positive_contribution / (1.0 + negative_contribution)
+        else:
+            reward = positive_contribution
+
+        # Additional cost penalty based on replica ratio and state
+        # Penalize high replicas in wasteful state more
+        if wasteful_score > 0.5 and replica_ratio > 0.6:
+            cost_factor = 1.8
+            cost_pen = self.cost_weight * cost_factor * replica_ratio
+            reward -= cost_pen * 0.3
+        # Reduce penalty for high replicas if system is critical
+        elif critical_score > 0.5 and replica_ratio > 0.5:
+            cost_factor = 0.2
+            cost_pen = self.cost_weight * cost_factor * replica_ratio
+            reward -= cost_pen * 0.1
+        else:
+            cost_factor = 1.0
+            cost_pen = self.cost_weight * cost_factor * replica_ratio * 0.2
+            reward -= cost_pen
+
+        # Bonus for achieving optimal state with efficient replica usage
+        if optimal_score > 0.6 and 0.3 <= replica_ratio <= 0.7:
+            reward += 0.05
+
+        # Bonus for stable balanced state
+        if balanced_score > 0.7:
+            reward += 0.03
+
+        # Clamp reward to [0, 1]
+        reward = max(min(reward, 1.0), 0.0)
+
+        # Calculate individual penalties for logging
         if self.cpu_usage < self.min_cpu:
             cpu_pen = (self.min_cpu - self.cpu_usage) / self.min_cpu
         elif self.cpu_usage > self.max_cpu:
@@ -197,45 +322,187 @@ class KubernetesEnv:
             resp_pen = min(1.0, (response_time_percentage - 100.0) / 100.0)
 
         cpu_mem_pen = self.cpu_memory_weight * (cpu_pen + mem_pen)
+        total_penalty = negative_contribution
 
-        replica_ratio = (self.replica_state - self.min_replicas) / self.range_replicas
-        
-        if response_time_percentage > 100 and replica_ratio > 0.7:
-            cost_factor = 0.3
-        elif response_time_percentage > 100 and replica_ratio <= 0.7:
-            cost_factor = 2
-        else:
-            cost_factor = 1.0
-
-        cost_pen = self.cost_weight * cost_factor * replica_ratio
-
-        total_penalty = resp_pen + cpu_mem_pen + cost_pen
-        total_penalty = max(0.0, total_penalty)
-
-        reward = float((1.0 / (1.0 + total_penalty)))
-
-        cpu_ideal = self.min_cpu <= self.cpu_usage <= self.max_cpu
-        mem_ideal = self.min_memory <= self.memory_usage <= self.max_memory
-        resp_ideal = response_time_percentage < 80
-        replica_efficient = 0.3 <= replica_ratio <= 0.6
-
-        if cpu_ideal and mem_ideal and resp_ideal and replica_efficient:
-            reward += 0.01
-
-        reward = max(min(reward, 1.0), 0.0)
-        
         self.logger.info(
-        f"📊 Reward Breakdown | Iter={getattr(self, 'iteration', '?')} | Replicas={self.replica_state}\n"
+        f"📊 Q-Learning Reward Breakdown | Iter={getattr(self, 'iteration', '?')} | Replicas={self.replica_state}\n"
+        f" ├─ State Quality: Optimal={optimal_score:.2f}, Balanced={balanced_score:.2f}, "
+        f"Wasteful={wasteful_score:.2f}, Critical={critical_score:.2f}\n"
+        f" ├─ Positive Contribution: {positive_contribution:.4f} (Optimal={optimal_contribution:.4f}, Balanced={balanced_contribution:.4f})\n"
+        f" ├─ Negative Contribution: {negative_contribution:.4f} (Wasteful={wasteful_penalty:.4f}, Critical={critical_penalty:.4f})\n"
         f" ├─ CPU Usage: {self.cpu_usage:.2f}% | Penalty={cpu_pen:.4f}\n"
         f" ├─ MEM Usage: {self.memory_usage:.2f}% | Penalty={mem_pen:.4f}\n"
         f" ├─ Response Time: {self.response_time:.2f} ms ({response_time_percentage:.2f}%) | Penalty={resp_pen:.4f}\n"
         f" ├─ Replica Ratio: {replica_ratio:.3f} | CostFactor={cost_factor:.2f} | CostPen={cost_pen:.4f}\n"
-        f" ├─ CPU+MEM Weighted Penalty: {cpu_mem_pen:.4f}\n"
-        f" ├─ Total Penalty: {total_penalty:.4f}\n"
         f" └─ ✅ Final Reward: {reward:.4f}"
     )
 
-        return reward
+        return reward, {
+            "reward": reward,
+            "cpu_penalty": cpu_pen,
+            "memory_penalty": mem_pen,
+            "response_time_penalty": resp_pen,
+            "cpu_memory_penalty": cpu_mem_pen,
+            "cost_penalty": cost_pen,
+            "cost_factor": cost_factor,
+            "total_penalty": total_penalty,
+            "replica_ratio": replica_ratio,
+            "response_time_percentage": response_time_percentage,
+            "optimal": optimal_score,
+            "balanced": balanced_score,
+            "wasteful": wasteful_score,
+            "critical": critical_score,
+            "positive_contribution": positive_contribution,
+            "negative_contribution": negative_contribution,
+        }
+
+    def _calculate_reward_fuzzy(self) -> Tuple[float, Dict[str, float]]:
+        """Calculate reward for Q-Learning Fuzzy algorithm using fuzzification"""
+        if self.response_time is None or math.isnan(self.response_time) or math.isinf(self.response_time):
+            self.response_time = 0.0
+
+        response_time_percentage = (self.response_time / self.max_response_time) * 100.0
+
+        # Prepare observation for fuzzification
+        observation = {
+            "cpu_usage": self.cpu_usage,
+            "memory_usage": self.memory_usage,
+            "response_time": response_time_percentage,
+        }
+
+        # Fuzzify the metrics
+        fuzzy_state = self.fuzzy.fuzzify(observation)
+
+        # Apply reward-specific fuzzy rules to evaluate state quality
+        reward_state = self.fuzzy.apply_reward_rules(fuzzy_state)
+
+        # Also get scaling decisions for additional context
+        fuzzy_actions = self.fuzzy.apply_rules(fuzzy_state)
+        fuzzy_influence = self.fuzzy.influence(fuzzy_actions)
+
+        # Get fuzzy memberships for logging
+        cpu_fz = fuzzy_state["cpu_usage"]
+        mem_fz = fuzzy_state["memory_usage"]
+        resp_fz = fuzzy_state["response_time"]
+
+        # Calculate reward based on state quality
+        # Optimal state gives positive contribution
+        optimal_contribution = reward_state["optimal"] * 1.0
+
+        # Balanced state gives moderate positive contribution
+        balanced_contribution = reward_state["balanced"] * 0.7
+
+        # Wasteful state creates penalty (over-provisioned)
+        wasteful_penalty = reward_state["wasteful"] * self.cost_weight * 1.5
+
+        # Critical state creates strong penalty (under-provisioned, performance issues)
+        critical_penalty = reward_state["critical"] * (self.response_time_weight + self.cpu_memory_weight)
+
+        # Combine contributions
+        positive_contribution = optimal_contribution + balanced_contribution
+        negative_contribution = wasteful_penalty + critical_penalty
+
+        # Base reward formula
+        if negative_contribution > 0:
+            reward = positive_contribution / (1.0 + negative_contribution)
+        else:
+            reward = positive_contribution
+
+        # Replica ratio for cost consideration
+        replica_ratio = (self.replica_state - self.min_replicas) / self.range_replicas
+
+        # Additional cost penalty based on replica ratio and state
+        # Penalize high replicas in wasteful state more
+        if reward_state["wasteful"] > 0.5 and replica_ratio > 0.6:
+            cost_factor = 1.8
+            cost_pen = self.cost_weight * cost_factor * replica_ratio
+            reward -= cost_pen * 0.3
+        # Reduce penalty for high replicas if system is critical
+        elif reward_state["critical"] > 0.5 and replica_ratio > 0.5:
+            cost_factor = 0.2
+            cost_pen = self.cost_weight * cost_factor * replica_ratio
+            reward -= cost_pen * 0.1
+        else:
+            cost_factor = 1.0
+            cost_pen = self.cost_weight * cost_factor * replica_ratio * 0.2
+            reward -= cost_pen
+
+        # Bonus for achieving optimal state with efficient replica usage
+        if reward_state["optimal"] > 0.6 and 0.3 <= replica_ratio <= 0.7:
+            reward += 0.05
+
+        # Bonus for stable balanced state
+        if reward_state["balanced"] > 0.7:
+            reward += 0.03
+
+        # Clamp reward to [0, 1]
+        reward = max(min(reward, 1.0), 0.0)
+
+        # Calculate individual penalties for logging compatibility
+        cpu_pen = (
+            cpu_fz.get("very_high", 0.0) * 1.0 +
+            cpu_fz.get("high", 0.0) * 0.7 +
+            cpu_fz.get("very_low", 0.0) * 0.5
+        )
+        mem_pen = (
+            mem_fz.get("very_high", 0.0) * 1.0 +
+            mem_fz.get("high", 0.0) * 0.7 +
+            mem_fz.get("very_low", 0.0) * 0.5
+        )
+        resp_pen = (
+            resp_fz.get("very_high", 0.0) * 1.0 +
+            resp_fz.get("high", 0.0) * 0.8
+        )
+        cpu_mem_pen = self.cpu_memory_weight * (cpu_pen + mem_pen)
+        total_penalty = negative_contribution
+
+        self.logger.info(
+        f"📊 Fuzzy Reward Breakdown | Iter={getattr(self, 'iteration', '?')} | Replicas={self.replica_state}\n"
+        f" ├─ State Quality: Optimal={reward_state['optimal']:.2f}, Balanced={reward_state['balanced']:.2f}, "
+        f"Wasteful={reward_state['wasteful']:.2f}, Critical={reward_state['critical']:.2f}\n"
+        f" ├─ Positive Contribution: {positive_contribution:.4f} (Optimal={optimal_contribution:.4f}, Balanced={balanced_contribution:.4f})\n"
+        f" ├─ Negative Contribution: {negative_contribution:.4f} (Wasteful={wasteful_penalty:.4f}, Critical={critical_penalty:.4f})\n"
+        f" ├─ CPU Fuzzy: vh={cpu_fz.get('very_high', 0):.2f}, h={cpu_fz.get('high', 0):.2f}, "
+        f"m={cpu_fz.get('medium', 0):.2f}, l={cpu_fz.get('low', 0):.2f}, vl={cpu_fz.get('very_low', 0):.2f}\n"
+        f" ├─ MEM Fuzzy: vh={mem_fz.get('very_high', 0):.2f}, h={mem_fz.get('high', 0):.2f}, "
+        f"m={mem_fz.get('medium', 0):.2f}, l={mem_fz.get('low', 0):.2f}, vl={mem_fz.get('very_low', 0):.2f}\n"
+        f" ├─ RESP Fuzzy: vh={resp_fz.get('very_high', 0):.2f}, h={resp_fz.get('high', 0):.2f}, "
+        f"m={resp_fz.get('medium', 0):.2f}, l={resp_fz.get('low', 0):.2f}, vl={resp_fz.get('very_low', 0):.2f}\n"
+        f" ├─ Fuzzy Actions: up={fuzzy_actions['scale_up']:.2f}, down={fuzzy_actions['scale_down']:.2f}, "
+        f"stay={fuzzy_actions['no_change']:.2f} | Influence={fuzzy_influence:.3f}\n"
+        f" ├─ Replica Ratio: {replica_ratio:.3f} | CostFactor={cost_factor:.2f} | CostPen={cost_pen:.4f}\n"
+        f" └─ ✅ Final Reward: {reward:.4f}"
+    )
+
+        return reward, {
+            "reward": reward,
+            "cpu_penalty": cpu_pen,
+            "memory_penalty": mem_pen,
+            "response_time_penalty": resp_pen,
+            "cpu_memory_penalty": cpu_mem_pen,
+            "cost_penalty": cost_pen,
+            "cost_factor": cost_factor,
+            "total_penalty": total_penalty,
+            "replica_ratio": replica_ratio,
+            "response_time_percentage": response_time_percentage,
+            "fuzzy_scale_up": fuzzy_actions["scale_up"],
+            "fuzzy_scale_down": fuzzy_actions["scale_down"],
+            "fuzzy_no_change": fuzzy_actions["no_change"],
+            "fuzzy_influence": fuzzy_influence,
+            "fuzzy_optimal": reward_state["optimal"],
+            "fuzzy_balanced": reward_state["balanced"],
+            "fuzzy_wasteful": reward_state["wasteful"],
+            "fuzzy_critical": reward_state["critical"],
+            "fuzzy_positive_contribution": positive_contribution,
+            "fuzzy_negative_contribution": negative_contribution,
+        }
+
+    def _calculate_reward(self) -> Tuple[float, Dict[str, float]]:
+        """Route to appropriate reward calculation based on algorithm"""
+        if self.algorithm == "Q-LEARNING-FUZZY":
+            return self._calculate_reward_fuzzy()
+        else:
+            return self._calculate_reward_qlearning()
 
 
     def _scale_and_get_metrics(self) -> None:
@@ -285,11 +552,13 @@ class KubernetesEnv:
             "response_time": response_time_percentage,
             "request_rate": self.request_rate,
             "request_rate_trend": self.request_rate_trend,
-            "replica_change": self.replica_change,
+            "action_change": self.action_change,
             "last_action": self.last_action,
         }
 
     def step(self, action: int) -> tuple[dict[str, float], float, bool, dict]:
+        # Calculate action change before updating last_action
+        self.action_change = action - self.last_action
         self.last_action = action
 
         self.previous_request_rate = self.request_rate
@@ -303,13 +572,11 @@ class KubernetesEnv:
             self.min_replicas, min(self.replica_state, self.max_replicas)
         )
 
-        self.replica_change = self.replica_state - self.replica_state_old
-
         self._scale_and_get_metrics()
 
         self.request_rate_trend = self.request_rate - self.previous_request_rate
 
-        reward = self._calculate_reward()
+        reward, reward_breakdown = self._calculate_reward()
 
         self.iteration -= 1
         terminated = bool(self.iteration <= 0)
@@ -326,8 +593,9 @@ class KubernetesEnv:
             "response_time": self.response_time,
             "request_rate": self.request_rate,
             "request_rate_trend": self.request_rate_trend,
-            "replica_change": self.replica_change,
+            "action_change": self.action_change,
             "last_action": self.last_action,
+            **reward_breakdown,  # Include detailed reward breakdown
         }
         self.influxdb.write_point(
             measurement="autoscaling_metrics",

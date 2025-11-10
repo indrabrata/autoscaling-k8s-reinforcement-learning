@@ -114,6 +114,129 @@ class Fuzzy:
 
         return res
 
+    def apply_reward_rules(self, fz: Dict[str, Dict[str, float]]) -> Dict[str, float]:
+        """
+        Apply fuzzy rules specifically designed for reward calculation.
+        Returns state quality metrics: optimal, wasteful, critical, balanced.
+        """
+        cpu = fz.get("cpu_usage", {})
+        mem = fz.get("memory_usage", {})
+        resp = fz.get("response_time", {})
+
+        # OPTIMAL STATE: Resources well-utilized, response time excellent
+        optimal_state = max(
+            # All metrics in ideal ranges
+            min(
+                max(cpu.get("medium", 0.0), cpu.get("high", 0.0)),
+                max(mem.get("medium", 0.0), mem.get("high", 0.0)),
+                max(resp.get("very_low", 0.0), resp.get("low", 0.0))
+            ) * 1.0,
+
+            # CPU/MEM medium with very low response time (best case)
+            min(
+                cpu.get("medium", 0.0),
+                mem.get("medium", 0.0),
+                resp.get("very_low", 0.0)
+            ) * 1.0,
+
+            # Slightly high CPU/MEM but response still low (acceptable)
+            min(
+                max(cpu.get("medium", 0.0), cpu.get("high", 0.0)),
+                max(mem.get("medium", 0.0), mem.get("high", 0.0)),
+                resp.get("low", 0.0)
+            ) * 0.9,
+        )
+
+        # WASTEFUL STATE: Over-provisioned, resources under-utilized
+        wasteful_state = max(
+            # All metrics very low (severe under-utilization)
+            min(
+                cpu.get("very_low", 0.0),
+                mem.get("very_low", 0.0),
+                resp.get("very_low", 0.0)
+            ) * 1.0,
+
+            # CPU and MEM low with very low response time
+            min(
+                cpu.get("low", 0.0),
+                mem.get("low", 0.0),
+                resp.get("very_low", 0.0)
+            ) * 0.9,
+
+            # One very low resource is enough to indicate waste
+            max(cpu.get("very_low", 0.0), mem.get("very_low", 0.0)) *
+            resp.get("very_low", 0.0) * 0.8,
+
+            # Low CPU and low memory with low response time
+            min(
+                cpu.get("low", 0.0),
+                mem.get("low", 0.0),
+                resp.get("low", 0.0)
+            ) * 0.7,
+        )
+
+        # CRITICAL STATE: Under-provisioned, performance degrading
+        critical_state = max(
+            # Very high response time is critical regardless of resources
+            resp.get("very_high", 0.0) * 1.0,
+
+            # High response time with high CPU/MEM (system struggling)
+            min(
+                max(cpu.get("high", 0.0), cpu.get("very_high", 0.0)),
+                max(mem.get("high", 0.0), mem.get("very_high", 0.0)),
+                resp.get("high", 0.0)
+            ) * 1.0,
+
+            # Very high CPU or MEM with medium or high response time
+            max(cpu.get("very_high", 0.0), mem.get("very_high", 0.0)) *
+            max(resp.get("medium", 0.0), resp.get("high", 0.0)) * 0.95,
+
+            # High response time alone is concerning
+            resp.get("high", 0.0) * 0.85,
+        )
+
+        # BALANCED STATE: Stable and efficient operation
+        balanced_state = max(
+            # All metrics in medium range (balanced)
+            min(
+                cpu.get("medium", 0.0),
+                mem.get("medium", 0.0),
+                resp.get("medium", 0.0)
+            ) * 1.0,
+
+            # CPU medium, response low (good efficiency)
+            min(
+                cpu.get("medium", 0.0),
+                max(mem.get("medium", 0.0), mem.get("low", 0.0)),
+                resp.get("low", 0.0)
+            ) * 0.95,
+
+            # Resources moderate with low response time
+            min(
+                max(cpu.get("low", 0.0), cpu.get("medium", 0.0)),
+                max(mem.get("low", 0.0), mem.get("medium", 0.0)),
+                resp.get("low", 0.0)
+            ) * 0.9,
+
+            # CPU/MEM slightly varied but response time good
+            min(
+                max(cpu.get("medium", 0.0), cpu.get("high", 0.0)),
+                mem.get("medium", 0.0),
+                max(resp.get("very_low", 0.0), resp.get("low", 0.0))
+            ) * 0.85,
+        )
+
+        # Normalize
+        total = optimal_state + wasteful_state + critical_state + balanced_state + 1e-6
+        res = {
+            "optimal": optimal_state / total,
+            "wasteful": wasteful_state / total,
+            "critical": critical_state / total,
+            "balanced": balanced_state / total,
+        }
+
+        self.logger.debug(f"Reward rules: {res}")
+        return res
 
     def influence(self, act: Dict[str, float]) -> float:
         up, down, stay = act["scale_up"], act["scale_down"], act["no_change"]

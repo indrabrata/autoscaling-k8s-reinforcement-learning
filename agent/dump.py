@@ -18,9 +18,9 @@ if __name__ == "__main__":
         log_to_file=True,
     )
 
-    choose_algorithm = os.getenv("ALGORITHM", "Q").upper()
+    choose_algorithm = os.getenv("ALGORITHM", "Q-LEARNING").upper()
   
-    if choose_algorithm == "Q":
+    if choose_algorithm == "Q-LEARNING":
         agent = QLearning(
             learning_rate=float(os.getenv("LEARNING_RATE", 0.1)),
             discount_factor=float(os.getenv("DISCOUNT_FACTOR", 0.95)),
@@ -31,7 +31,7 @@ if __name__ == "__main__":
             logger=logger,
         )
 
-    elif choose_algorithm in ("Q-FUZZY", "QFUZZYHYBRID", "Q_FUZZY"):
+    elif choose_algorithm == "Q-LEARNING-FUZZY":
         agent = QLearningFuzzy(
             learning_rate=float(os.getenv("LEARNING_RATE", 0.1)),
             discount_factor=float(os.getenv("DISCOUNT_FACTOR", 0.95)),
