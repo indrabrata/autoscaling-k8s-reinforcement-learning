@@ -6,18 +6,14 @@ from pathlib import Path
 from types import FrameType
 from typing import Optional, Union
 
-from torch import mode
-
 from environment import KubernetesEnv
 from rl import QLearning, QLearningFuzzy
 from utils import log_verbose_details
-
 
 @dataclass
 class SaveConfig:
     note: str
     start_time: int
-
 
 class Trainer:
     def __init__(

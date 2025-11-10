@@ -67,7 +67,7 @@ if __name__ == "__main__":
         algorithm=choose_algorithm,
     )
 
-    if choose_algorithm == "Q":
+    if choose_algorithm == "Q-LEARNING":
         algorithm = QLearning(
             learning_rate=float(os.getenv("LEARNING_RATE", 0.1)),
             discount_factor=float(os.getenv("DISCOUNT_FACTOR", 0.95)),
@@ -78,7 +78,7 @@ if __name__ == "__main__":
             logger=logger,
         )
 
-    elif choose_algorithm in ("Q-FUZZY", "QFUZZYHYBRID", "Q_FUZZY"):
+    elif choose_algorithm == "Q-LEARNING-FUZZY":
         algorithm = QLearningFuzzy(
             learning_rate=float(os.getenv("LEARNING_RATE", 0.1)),
             discount_factor=float(os.getenv("DISCOUNT_FACTOR", 0.95)),

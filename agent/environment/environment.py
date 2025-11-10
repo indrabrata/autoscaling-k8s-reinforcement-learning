@@ -9,7 +9,6 @@ from kubernetes.client.exceptions import ApiException
 from prometheus_api_client import PrometheusConnect
 from utils import get_metrics, wait_for_pods_ready
 
-
 class KubernetesEnv:
     def __init__(
         self,
@@ -78,6 +77,13 @@ class KubernetesEnv:
         self.cost_weight = cost_weight
 
         self.algorithm = algorithm
+
+        # Initialize state tracking variables
+        self.request_rate = 0.0
+        self.previous_request_rate = 0.0
+        self.request_rate_trend = 0.0
+        self.replica_change = 0
+
         self.logger.info("Initialized KubernetesEnv environment")
         self.logger.info(f"Environment configuration: {self.__dict__}")
 
@@ -243,20 +249,24 @@ class KubernetesEnv:
             timeout=self.timeout,
             logger=self.logger,
         )
-        self.cpu_usage, self.memory_usage, self.response_time, self.replica = (
-            get_metrics(
-                replicas=ready_replicas,
-                timeout=self.timeout,
-                namespace=self.namespace,
-                deployment_name=self.deployment_name,
-                wait_time=self.wait_time,
-                prometheus=self.prometheus,
-                interval=self.metrics_interval,
-                quantile=self.metrics_quantile,
-                endpoints_method=self.metrics_endpoints_method,
-                increase=increase,
-                logger=self.logger,
-            )
+        (
+            self.cpu_usage,
+            self.memory_usage,
+            self.response_time,
+            self.request_rate,
+            self.replica,
+        ) = get_metrics(
+            replicas=ready_replicas,
+            timeout=self.timeout,
+            namespace=self.namespace,
+            deployment_name=self.deployment_name,
+            wait_time=self.wait_time,
+            prometheus=self.prometheus,
+            interval=self.metrics_interval,
+            quantile=self.metrics_quantile,
+            endpoints_method=self.metrics_endpoints_method,
+            increase=increase,
+            logger=self.logger,
         )
 
         if not ready:
@@ -273,11 +283,16 @@ class KubernetesEnv:
             "cpu_usage": self.cpu_usage,
             "memory_usage": self.memory_usage,
             "response_time": response_time_percentage,
+            "request_rate": self.request_rate,
+            "request_rate_trend": self.request_rate_trend,
+            "replica_change": self.replica_change,
             "last_action": self.last_action,
         }
 
     def step(self, action: int) -> tuple[dict[str, float], float, bool, dict]:
         self.last_action = action
+
+        self.previous_request_rate = self.request_rate
 
         percentage = (
             (action / 99.0) if len(self.action_space) > 1 else 0.0
@@ -288,7 +303,11 @@ class KubernetesEnv:
             self.min_replicas, min(self.replica_state, self.max_replicas)
         )
 
+        self.replica_change = self.replica_state - self.replica_state_old
+
         self._scale_and_get_metrics()
+
+        self.request_rate_trend = self.request_rate - self.previous_request_rate
 
         reward = self._calculate_reward()
 
@@ -305,6 +324,9 @@ class KubernetesEnv:
             "cpu_usage": self.cpu_usage,
             "memory_usage": self.memory_usage,
             "response_time": self.response_time,
+            "request_rate": self.request_rate,
+            "request_rate_trend": self.request_rate_trend,
+            "replica_change": self.replica_change,
             "last_action": self.last_action,
         }
         self.influxdb.write_point(

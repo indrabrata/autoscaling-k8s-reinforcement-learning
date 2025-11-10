@@ -4,13 +4,9 @@ import time
 import numpy as np
 from prometheus_api_client import PrometheusApiClientException, PrometheusConnect
 
-
-def _metrics_query(
-    namespace: str,
-    deployment_name: str,
-    interval: int = 15,
-) -> tuple[str, str, str, str]:
-    scope_ready = f"""
+def _build_scope_ready_query(namespace: str, deployment_name: str) -> str:
+    """Build the base query for filtering ready pods in a deployment."""
+    return f"""
     (
         (kube_pod_status_ready{{namespace="{namespace}", condition="true"}} == 1)
         and on(pod)
@@ -28,7 +24,10 @@ def _metrics_query(
     )
     """
 
-    cpu_query = f"""
+
+def _build_cpu_usage_query(namespace: str, scope_ready: str, interval: int = 15) -> str:
+    """Build CPU usage query for pods."""
+    return f"""
         sum by (pod) (
         rate(container_cpu_usage_seconds_total{{
             namespace="{namespace}",
@@ -39,7 +38,10 @@ def _metrics_query(
         {scope_ready}
         """
 
-    memory_query = f"""
+
+def _build_memory_usage_query(namespace: str, scope_ready: str) -> str:
+    """Build memory usage query for pods."""
+    return f"""
         sum by (pod) (
             container_memory_working_set_bytes{{
                 namespace="{namespace}",
@@ -51,7 +53,10 @@ def _metrics_query(
         {scope_ready}
         """
 
-    cpu_limits_query = f"""
+
+def _build_cpu_limits_query(namespace: str, scope_ready: str) -> str:
+    """Build CPU limits query for pods."""
+    return f"""
         sum by (pod) (
             kube_pod_container_resource_limits{{
                 namespace="{namespace}",
@@ -61,10 +66,12 @@ def _metrics_query(
         )
         AND on(pod)
         {scope_ready}
-
         """
 
-    memory_limits_query = f"""
+
+def _build_memory_limits_query(namespace: str, scope_ready: str) -> str:
+    """Build memory limits query for pods."""
+    return f"""
         sum by (pod) (
             kube_pod_container_resource_limits{{
                 namespace="{namespace}",
@@ -76,37 +83,38 @@ def _metrics_query(
         {scope_ready}
         """
 
-    return (
-        cpu_query,
-        memory_query,
-        cpu_limits_query,
-        memory_limits_query,
+
+def _build_request_rate_query(
+    namespace: str, deployment_name: str, interval: int = 15
+) -> str:
+    """Build request rate query for the deployment."""
+    return f"""
+    sum(
+        rate(app_requests_total{{
+            namespace="{namespace}",
+            pod=~"{deployment_name}-.*"
+        }}[{interval}s])
     )
+    """
+
+def _extract_limits_by_pod(results: list) -> dict[str, float]:
+    """Extract resource limits indexed by pod name."""
+    limits_by_pod = {}
+    for result in results:
+        pod_name = result["metric"].get("pod")
+        if pod_name:
+            limits_by_pod[pod_name] = float(result["value"][1])
+    return limits_by_pod
 
 
-def _metrics_result(
-    cpu_limits_results: list,
-    memory_limits_results: list,
+def _calculate_cpu_percentages(
     cpu_usage_results: list,
-    memory_usage_results: list,
+    cpu_limits_by_pod: dict[str, float],
     logger: logging.Logger = logging.getLogger(__name__),
-) -> tuple[list[float], list[float], set[str]]:
+) -> tuple[list[float], set[str]]:
+    """Calculate CPU usage percentages for all pods."""
     cpu_percentages = []
-    memory_percentages = []
     pod_names = set()
-
-    cpu_limits_by_pod = {}
-    memory_limits_by_pod = {}
-
-    for result in cpu_limits_results:
-        pod_name = result["metric"].get("pod")
-        if pod_name:
-            cpu_limits_by_pod[pod_name] = float(result["value"][1])
-
-    for result in memory_limits_results:
-        pod_name = result["metric"].get("pod")
-        if pod_name:
-            memory_limits_by_pod[pod_name] = float(result["value"][1])
 
     for result in cpu_usage_results:
         pod_name = result["metric"].get("pod")
@@ -114,8 +122,8 @@ def _metrics_result(
             logger.warning(f"Skipping pod {pod_name}: CPU limit missing")
             continue
 
-        rate_cores = float(result["value"][1])  # cores
-        limit_cores = float(cpu_limits_by_pod[pod_name])  # cores
+        rate_cores = float(result["value"][1])
+        limit_cores = cpu_limits_by_pod[pod_name]
 
         if limit_cores <= 0:
             logger.warning(f"CPU limit not set or zero for pod {pod_name}")
@@ -129,33 +137,71 @@ def _metrics_result(
             f"{limit_cores} -> {cpu_percentage:.2f}%"
         )
 
+    return cpu_percentages, pod_names
+
+
+def _calculate_memory_percentages(
+    memory_usage_results: list,
+    memory_limits_by_pod: dict[str, float],
+    valid_pod_names: set[str],
+    logger: logging.Logger = logging.getLogger(__name__),
+) -> list[float]:
+    """Calculate memory usage percentages for all valid pods."""
+    memory_percentages = []
+
     for result in memory_usage_results:
         pod_name = result["metric"].get("pod")
         if (
             not pod_name
             or pod_name not in memory_limits_by_pod
-            or pod_name not in pod_names
+            or pod_name not in valid_pod_names
         ):
             logger.warning(f"Skipping pod {pod_name}: Memory limit missing")
             continue
 
         used_bytes = float(result["value"][1])
-        limit_bytes = float(memory_limits_by_pod[pod_name])
+        limit_bytes = memory_limits_by_pod[pod_name]
+
         if limit_bytes <= 0:
             logger.warning(f"Memory limit not set or zero for pod {pod_name}")
             continue
 
         memory_percentage = (used_bytes / limit_bytes) * 100.0
+        memory_percentages.append(memory_percentage)
         logger.debug(
             f"Pod {pod_name}: Memory {used_bytes:.2f} bytes / "
             f"{limit_bytes} -> {memory_percentage:.2f}%"
         )
-        memory_percentages.append(memory_percentage)
-        pod_names.add(pod_name)
 
-        logger.debug(f"Pod names with metrics: {pod_names}")
-        logger.debug(f"CPU percentages: {cpu_percentages}")
-        logger.debug(f"Memory percentages: {memory_percentages}")
+    return memory_percentages
+
+
+def _metrics_result(
+    cpu_limits_results: list,
+    memory_limits_results: list,
+    cpu_usage_results: list,
+    memory_usage_results: list,
+    logger: logging.Logger = logging.getLogger(__name__),
+) -> tuple[list[float], list[float], set[str]]:
+    """Process metrics results and calculate resource usage percentages."""
+    # Extract limits for each pod
+    cpu_limits_by_pod = _extract_limits_by_pod(cpu_limits_results)
+    memory_limits_by_pod = _extract_limits_by_pod(memory_limits_results)
+
+    # Calculate CPU percentages and get valid pod names
+    cpu_percentages, pod_names = _calculate_cpu_percentages(
+        cpu_usage_results, cpu_limits_by_pod, logger
+    )
+
+    # Calculate memory percentages only for pods with valid CPU metrics
+    memory_percentages = _calculate_memory_percentages(
+        memory_usage_results, memory_limits_by_pod, pod_names, logger
+    )
+
+    logger.debug(f"Pod names with metrics: {pod_names}")
+    logger.debug(f"CPU percentages: {cpu_percentages}")
+    logger.debug(f"Memory percentages: {memory_percentages}")
+
     return cpu_percentages, memory_percentages, pod_names
 
 
@@ -228,6 +274,55 @@ def _get_response_time(
     return response_time
 
 
+def _get_request_rate(
+    prometheus: PrometheusConnect,
+    rps_query: str,
+    logger: logging.Logger = logging.getLogger(__name__),
+) -> float:
+    """Get current request rate (RPS) for the deployment."""
+    try:
+        result = prometheus.custom_query(rps_query)
+        if result and len(result) > 0:
+            rps = float(result[0]["value"][1])
+            logger.debug(f"Current RPS: {rps:.2f}")
+            return rps
+        logger.debug("No RPS data available, returning 0.0")
+        return 0.0
+    except PrometheusApiClientException as e:
+        logger.warning(f"Failed to fetch RPS: {e}. Returning 0.0")
+        return 0.0
+    except Exception as e:
+        logger.error(f"Unexpected error fetching RPS: {e}. Returning 0.0")
+        return 0.0
+
+
+def _fetch_metric_with_retry(
+    prometheus: PrometheusConnect,
+    query: str,
+    metric_name: str,
+    expected_count: int,
+    timeout: int,
+    logger: logging.Logger = logging.getLogger(__name__),
+) -> list:
+    """Fetch a single metric with retry until timeout or expected count is reached."""
+    fetch_start = time.time()
+
+    while time.time() - fetch_start < timeout:
+        results = prometheus.custom_query(query)
+        logger.debug(f"Fetched {len(results)} {metric_name} entries")
+
+        if len(results) != expected_count:
+            logger.debug(
+                f"Expected {expected_count} {metric_name} results, "
+                f"got {len(results)}"
+            )
+            time.sleep(1)
+            continue
+        return results
+
+    return results
+
+
 def _scrape_metrics(
     fetch_timeout: int,
     prometheus: PrometheusConnect,
@@ -238,56 +333,24 @@ def _scrape_metrics(
     replicas: int,
     logger: logging.Logger = logging.getLogger(__name__),
 ) -> tuple[list, list, list, list]:
-    fetch_start = time.time()
-
-    while time.time() - fetch_start < fetch_timeout:
-        cpu_usage_results = prometheus.custom_query(cpu_query)
-        logger.debug(f"Fetched {len(cpu_usage_results)} CPU usage entries")
-        if len(cpu_usage_results) != replicas:
-            logger.debug(
-                f"Expected {replicas} CPU usage results, got {len(cpu_usage_results)}"
-            )
-            time.sleep(1)
-            continue
-        break
-
-    fetch_start = time.time()
-    while time.time() - fetch_start < fetch_timeout:
-        memory_usage_results = prometheus.custom_query(memory_query)
-        logger.debug(f"Fetched {len(memory_usage_results)} Memory usage entries")
-        if len(memory_usage_results) != replicas:
-            logger.debug(
-                f"Expected {replicas} Memory usage results, got "
-                f"{len(memory_usage_results)}"
-            )
-            time.sleep(1)
-            continue
-        break
-
-    fetch_start = time.time()
-    while time.time() - fetch_start < fetch_timeout:
-        cpu_limits_results = prometheus.custom_query(cpu_limits_query)
-        logger.debug(f"Fetched {len(cpu_limits_results)} CPU limits entries")
-        if len(cpu_limits_results) != replicas:
-            logger.debug(
-                f"Expected {replicas} CPU limits results, got {len(cpu_limits_results)}"
-            )
-            time.sleep(1)
-            continue
-        break
-
-    fetch_start = time.time()
-    while time.time() - fetch_start < fetch_timeout:
-        memory_limits_results = prometheus.custom_query(memory_limits_query)
-        logger.debug(f"Fetched {len(memory_limits_results)} Memory limits entries")
-        if len(memory_limits_results) != replicas:
-            logger.debug(
-                f"Expected {replicas} Memory limits results, "
-                f"got {len(memory_limits_results)}"
-            )
-            time.sleep(1)
-            continue
-        break
+    """Scrape all required metrics from Prometheus with retry logic."""
+    cpu_usage_results = _fetch_metric_with_retry(
+        prometheus, cpu_query, "CPU usage", replicas, fetch_timeout, logger
+    )
+    memory_usage_results = _fetch_metric_with_retry(
+        prometheus, memory_query, "Memory usage", replicas, fetch_timeout, logger
+    )
+    cpu_limits_results = _fetch_metric_with_retry(
+        prometheus, cpu_limits_query, "CPU limits", replicas, fetch_timeout, logger
+    )
+    memory_limits_results = _fetch_metric_with_retry(
+        prometheus,
+        memory_limits_query,
+        "Memory limits",
+        replicas,
+        fetch_timeout,
+        logger,
+    )
 
     logger.debug(
         f"Fetched metrics: CPU usage {len(cpu_usage_results)} entries, "
@@ -313,12 +376,18 @@ def get_metrics(
     deployment_name: str,
     wait_time: int,
     prometheus: PrometheusConnect,
-    interval: int = 15,
+    interval: int = 30,
     quantile: float = 0.90,
     endpoints_method: list[tuple[str, str]] = (("/", "GET"), ("/docs", "GET")),
     increase: bool = False,
     logger: logging.Logger = logging.getLogger(__name__),
-) -> tuple[float, float, float, int]:
+) -> tuple[float, float, float, float, int]:
+    """
+    Collect metrics from Prometheus for a deployment.
+
+    Returns:
+        tuple: (cpu_mean, mem_mean, response_time, request_rate, collected_pods)
+    """
     if increase or wait_time > 0:
         time.sleep(wait_time)
 
@@ -331,9 +400,14 @@ def get_metrics(
             time.sleep(1)
             continue
 
-        cpu_query, memory_query, cpu_limits_query, memory_limits_query = _metrics_query(
-            namespace, deployment_name, interval=interval
-        )
+        # Build individual queries
+        scope_ready = _build_scope_ready_query(namespace, deployment_name)
+        cpu_query = _build_cpu_usage_query(namespace, scope_ready, interval)
+        memory_query = _build_memory_usage_query(namespace, scope_ready)
+        cpu_limits_query = _build_cpu_limits_query(namespace, scope_ready)
+        memory_limits_query = _build_memory_limits_query(namespace, scope_ready)
+        request_rate_query = _build_request_rate_query(namespace, deployment_name, interval)
+
         logger.debug("Metrics queries prepared, querying Prometheus...")
         logger.debug(f"CPU Query: {cpu_query}")
         logger.debug(f"Memory Query: {memory_query}")
@@ -385,6 +459,12 @@ def get_metrics(
                 quantile=quantile,
                 logger=logger,
             )
+            
+            request_rate = _get_request_rate(
+                prometheus=prometheus,
+                rps_query=request_rate_query,
+                logger=logger,
+            )
 
             collected = len(pod_names)
             if collected == 0:
@@ -411,9 +491,10 @@ def get_metrics(
                     f"Metrics collected from {collected} pods: \n"
                     f"CPU usage mean {cpu_mean:.3f}%, \n"
                     f"Memory usage mean {mem_mean:.3f}%, \n"
-                    f"Response time {response_time:.3f} ms"
+                    f"Response time {response_time:.3f} ms, \n"
+                    f"Request rate {request_rate:.3f} req/s"
                 )
-                return cpu_mean, mem_mean, response_time, collected
+                return cpu_mean, mem_mean, response_time, request_rate, collected
             logger.warning(
                 f"Only collected metrics from {collected} pods, expected {replicas}"
             )
@@ -427,4 +508,4 @@ def get_metrics(
         time.sleep(1)
 
     logger.error("Timeout reached while fetching metrics.")
-    return 0.0, 0.0, 0.0, 0
+    return 0.0, 0.0, 0.0, 0.0, 0

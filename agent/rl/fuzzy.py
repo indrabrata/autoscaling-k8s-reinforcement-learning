@@ -12,7 +12,7 @@ class Fuzzy:
                 return 1.0
             elif a < x < b:
                 return (x - a) / (b - a) if (b - a) != 0 else 0.0
-            else:  # c < x < d
+            else: 
                 return (d - x) / (d - c) if (d - c) != 0 else 0.0
 
         self.memberships = {

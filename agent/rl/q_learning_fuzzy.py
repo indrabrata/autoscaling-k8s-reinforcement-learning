@@ -1,17 +1,15 @@
+import math
 import pickle
-from pathlib import Path
-from typing import Optional, Dict, Tuple
 from logging import Logger
+from pathlib import Path
+from typing import Dict, Optional, Tuple
+
 import numpy as np
 import urllib3
 
 from .fuzzy import Fuzzy
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-import pprint
-
-import numpy as np
-import math
 
 
 

@@ -1,3 +1,4 @@
+import math
 import pickle
 from logging import Logger
 from pathlib import Path
@@ -5,10 +6,6 @@ from typing import Optional
 
 import numpy as np
 import urllib3
-import numpy as np
-import math
-import numpy as np
-import math
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
