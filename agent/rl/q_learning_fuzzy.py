@@ -23,7 +23,7 @@ class QLearningFuzzy:
         n_actions: int = 100,
         logger: Optional[Logger] = None,
     ):
-        self.agent_type = "QFuzzyHybrid"
+        self.agent_type = "Q-LEARNING-FUZZY"
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
         self.epsilon = epsilon_start
@@ -39,7 +39,7 @@ class QLearningFuzzy:
         self.logger.info("Initialized QFuzzyHybrid agent")
         self.logger.debug(f"Agent parameters: {self.__dict__}")
 
-    def get_state_key(self, observation: dict) -> Tuple[str, str, str]:
+    def get_state_key(self, observation: dict) -> Tuple[str, str, str, int, int, int, int]:
         response_time_raw = observation["response_time"]
         if np.isnan(response_time_raw) or response_time_raw is None:
             response_time = 0
@@ -51,7 +51,11 @@ class QLearningFuzzy:
         cpu_label = max(fuzzy_state["cpu_usage"], key=fuzzy_state["cpu_usage"].get)
         mem_label = max(fuzzy_state["memory_usage"], key=fuzzy_state["memory_usage"].get)
         resp_label = max(fuzzy_state["response_time"], key=fuzzy_state["response_time"].get)
-        return (cpu_label, mem_label, resp_label)
+        last_action = int(observation["last_action"])
+        action_change = int(observation["action_change"])
+        request_rate = int(observation["request_rate"])
+        request_rate_trend = int(observation["request_rate_trend"])
+        return (cpu_label, mem_label, resp_label, last_action, action_change, request_rate, request_rate_trend)
 
     def get_action(self, observation: dict) -> int:
         state_key = self.get_state_key(observation)

@@ -1,26 +1,26 @@
-import http from 'k6/http';
-import { check, sleep } from 'k6';
+import http from "k6/http";
+import { check, sleep } from "k6";
 
 export const options = {
   scenarios: {
     cpu_stress: {
-      executor: 'ramping-vus',
-      exec: 'cpuTest',
+      executor: "ramping-vus",
+      exec: "cpuTest",
       startVUs: 0,
       stages: [
-        { duration: '30s', target: 10 },
-        { duration: '1m', target: 50 },
-        { duration: '2m', target: 150 },
-        { duration: '1m', target: 50 },
-        { duration: '30s', target: 0 },
+        { duration: "30s", target: 10 },
+        { duration: "1m", target: 25 },
+        { duration: "2m", target: 75 },
+        { duration: "1m", target: 50 },
+        { duration: "30s", target: 0 },
       ],
-      gracefulRampDown: '10s',
+      gracefulRampDown: "10s",
     },
   },
 
   thresholds: {
-    http_req_failed: ['rate<0.01'],
-    'http_req_duration{scenario:cpu_stress}': ['p(95)<2000'],
+    http_req_failed: ["rate<0.01"],
+    "http_req_duration{scenario:cpu_stress}": ["p(95)<2000"],
   },
 };
 
@@ -31,8 +31,8 @@ export function cpuTest() {
   const res = http.post(url);
 
   check(res, {
-    'CPU: status 200': (r) => r.status === 200,
-    'CPU: body not empty': (r) => r.body.length > 0,
+    "CPU: status 200": (r) => r.status === 200,
+    "CPU: body not empty": (r) => r.body.length > 0,
   });
 
   sleep(1);

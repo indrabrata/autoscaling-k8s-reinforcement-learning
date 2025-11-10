@@ -22,7 +22,7 @@ class QLearning:
         logger: Optional[Logger] = None,
     ):
         self.n_actions = 100
-        self.agent_type = "Q"
+        self.agent_type = "Q-LEARNING"
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
         self.epsilon = epsilon_start
@@ -39,10 +39,13 @@ class QLearning:
     def add_episode_count(self, count: int = 1):
         self.episodes_trained += count
 
-    def get_state_key(self, observation: dict) -> tuple[int, int, int, int]:
+    def get_state_key(self, observation: dict) -> tuple[int, int, int, int, int, int, int]:
         cpu = int(observation["cpu_usage"])
         memory = int(observation["memory_usage"])
-        action = int(observation["last_action"])
+        last_action = int(observation["last_action"])
+        action_change = int(observation["action_change"])
+        request_rate = int(observation["request_rate"])
+        request_rate_trend = int(observation["request_rate_trend"])
 
         response_time_raw = observation["response_time"]
         if np.isnan(response_time_raw) or response_time_raw is None:
@@ -50,7 +53,7 @@ class QLearning:
         else:
             response_time = int(response_time_raw)
 
-        return (cpu, memory, response_time, action)
+        return (cpu, memory, response_time, last_action, action_change, request_rate, request_rate_trend)
 
     def get_action(self, observation: dict) -> int:
         state_key = self.get_state_key(observation)
