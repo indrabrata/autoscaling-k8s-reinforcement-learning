@@ -139,28 +139,28 @@ class QLearning:
 
     def show_model_summary(self, max_states: int = None):
         print("\n" + "=" * 120)
-        print(f"🧠 Q-Learning Agent Summary ({self.agent_type})".center(120))
+        print(f"Q-Learning Agent Summary ({self.agent_type})".center(120))
         print("=" * 120)
-        print(f"📅 Created At        : {self.created_at}")
-        print(f"📈 Episodes Trained  : {self.episodes_trained}")
-        print(f"🎯 Learning Rate     : {self.learning_rate}")
-        print(f"💸 Discount Factor   : {self.discount_factor}")
-        print(f"🎲 Epsilon (current) : {self.epsilon:.5f}")
-        print(f"↘️  Epsilon Min       : {self.epsilon_min}")
-        print(f"🌀 Epsilon Decay     : {self.epsilon_decay}")
-        print(f"🔢 Number of Actions : {self.n_actions}")
-        print(f"📊 Q-Table Size      : {len(self.q_table)} states")
+        print(f"Created At        : {self.created_at}")
+        print(f"Episodes Trained  : {self.episodes_trained}")
+        print(f"Learning Rate     : {self.learning_rate}")
+        print(f"Discount Factor   : {self.discount_factor}")
+        print(f"Epsilon (current) : {self.epsilon:.5f}")
+        print(f"Epsilon Min       : {self.epsilon_min}")
+        print(f"Epsilon Decay     : {self.epsilon_decay}")
+        print(f"Number of Actions : {self.n_actions}")
+        print(f"Q-Table Size      : {len(self.q_table)} states")
         print("=" * 120)
 
         if not self.q_table:
-            print("⚠️  Q-table is empty — no states have been learned yet.")
+            print("Q-table is empty - no states have been learned yet.")
             print("=" * 120)
             return
 
         total_states = len(self.q_table)
         states_to_show = total_states if max_states is None else min(max_states, total_states)
 
-        print(f"🧩 Showing {states_to_show}/{total_states} Q-table states:\n")
+        print(f"Showing {states_to_show}/{total_states} Q-table states:\n")
         print("-" * 120)
         print(f"{'Idx':<5} {'State (CPU, MEM, RESP, ACT)':<45} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}")
         print("-" * 120)
@@ -197,6 +197,6 @@ class QLearning:
                 print(" " * 9 + row_str)
             print("-" * 120)
 
-        print("✅ End of full Q-table summary.")
+        print("End of full Q-table summary.")
         print("=" * 120 + "\n")
                                 

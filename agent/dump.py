@@ -19,7 +19,7 @@ if __name__ == "__main__":
     )
 
     choose_algorithm = os.getenv("ALGORITHM", "Q-LEARNING").upper()
-  
+
     if choose_algorithm == "Q-LEARNING":
         agent = QLearning(
             learning_rate=float(os.getenv("LEARNING_RATE", 0.1)),
@@ -41,14 +41,14 @@ if __name__ == "__main__":
             created_at=start_time,
             logger=logger,
         )
-        
+
     else:
         raise ValueError(f"Unsupported algorithm: {choose_algorithm}")
-        
+
     model_path = os.getenv("MODEL_PATH", "")
     if model_path == "":
         raise ValueError(f"Invalid model path: {model_path}")
-      
+
     agent.load_model(model_path)
     agent.show_model_summary(max_states=125)
-        
+

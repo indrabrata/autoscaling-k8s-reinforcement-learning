@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: resource-intensive-qfuzzy-metrics
+  namespace: default
+  labels:
+    app: kube-prometheus-stack
+    release: prometheus
+    prometheus: kube-prometheus-stack
+    algorithm: q-learning-fuzzy
+spec:
+  selector:
+    matchLabels:
+      app: resource-intensive-qfuzzy
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 5s
+      scrapeTimeout: 3s

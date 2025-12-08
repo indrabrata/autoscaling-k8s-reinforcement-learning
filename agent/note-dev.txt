@@ -1,0 +1,7 @@
+Since the resource is limited so i limit the scaling pod.
+
+The resource is : 
+Max Req CPU : 2000m
+Max Req Memory : 2560Mi
+Max Limit CPU : 10000m
+Max Limit Memory : 10240Mi

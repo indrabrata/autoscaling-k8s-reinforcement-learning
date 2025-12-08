@@ -51,7 +51,7 @@ class Trainer:
 
     def _interrupted_save(self) -> Path | None:
         if not (self.agent and self.savecfg):
-            self.logger.warning("⚠️ Nothing to save yet.")
+            self.logger.warning("Nothing to save yet.")
             return None
 
         ext = ".pkl"
@@ -72,7 +72,7 @@ class Trainer:
         path = interrupted_dir / f"interrupted_episode_{ep}_{ts}{ext}"
 
         self.agent.save_model(str(path), ep)
-        self.logger.info(f"✅ Model saved to: {path}")
+        self.logger.info(f"Model saved to: {path}")
         self.logger.info(f"Episodes completed: {ep}")
         return path
 

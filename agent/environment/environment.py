@@ -125,7 +125,7 @@ class KubernetesEnv:
 
                 if attempt > 1:
                     self.logger.info(
-                        f"✅ Scaling succeeded on attempt {attempt} "
+                        f"Scaling succeeded on attempt {attempt} "
                         f"(timeout: {current_timeout}s)"
                     )
                 return
@@ -134,45 +134,45 @@ class KubernetesEnv:
                 if e.status == HTTP_INTERNAL_SERVER_ERROR:
                     if "etcdserver: request timed out" in str(e):
                         self.logger.warning(
-                            f"⏰ Etcd timeout on attempt {attempt} "
+                            f"Etcd timeout on attempt {attempt} "
                             f"(timeout: {current_timeout}s). "
                             f"Retrying in {delay:.1f}s..."
                         )
                     else:
                         self.logger.warning(
-                            f"🔄 Server error on attempt {attempt}: {e.reason}. "
+                            f"Server error on attempt {attempt}: {e.reason}. "
                             f"Retrying in {delay:.1f}s..."
                         )
                 elif e.status == HTTP_CONFLICT:
                     self.logger.warning(
-                        f"⚠️  Conflict on attempt {attempt} "
+                        f"Conflict on attempt {attempt} "
                         f"(likely concurrent modification). "
                         f"Retrying in {delay:.1f}s..."
                     )
                 else:
                     self.logger.warning(
-                        f"🚨 API error on attempt {attempt} "
+                        f"API error on attempt {attempt} "
                         f"(status: {e.status}): {e.reason}. "
                         f"Retrying in {delay:.1f}s..."
                     )
 
             except Exception as e:
                 self.logger.warning(
-                    f"💥 Unexpected error on attempt {attempt}: {type(e).__name__}: "
+                    f"Unexpected error on attempt {attempt}: {type(e).__name__}: "
                     f"{e}. "
                     f"Retrying in {delay:.1f}s..."
                 )
 
             if attempt % 10 == 0:
                 self.logger.info(
-                    f"🔄 Still retrying scaling operation... "
+                    f"Still retrying scaling operation... "
                     f"Attempt {attempt}, next timeout: {current_timeout}s"
                 )
 
             time.sleep(delay)
 
         self.logger.error(
-            f"❌ CRITICAL: Failed to scale after {self.max_scaling_retries} attempts. "
+            f"CRITICAL: Failed to scale after {self.max_scaling_retries} attempts. "
             f"This indicates a serious cluster issue. "
             f"Proceeding with current replica state to avoid blocking training."
         )
@@ -325,7 +325,7 @@ class KubernetesEnv:
         total_penalty = negative_contribution
 
         self.logger.info(
-        f"📊 Q-Learning Reward Breakdown | Iter={getattr(self, 'iteration', '?')} | Replicas={self.replica_state}\n"
+        f"Q-Learning Reward Breakdown | Iter={getattr(self, 'iteration', '?')} | Replicas={self.replica_state}\n"
         f" ├─ State Quality: Optimal={optimal_score:.2f}, Balanced={balanced_score:.2f}, "
         f"Wasteful={wasteful_score:.2f}, Critical={critical_score:.2f}\n"
         f" ├─ Positive Contribution: {positive_contribution:.4f} (Optimal={optimal_contribution:.4f}, Balanced={balanced_contribution:.4f})\n"
@@ -334,7 +334,7 @@ class KubernetesEnv:
         f" ├─ MEM Usage: {self.memory_usage:.2f}% | Penalty={mem_pen:.4f}\n"
         f" ├─ Response Time: {self.response_time:.2f} ms ({response_time_percentage:.2f}%) | Penalty={resp_pen:.4f}\n"
         f" ├─ Replica Ratio: {replica_ratio:.3f} | CostFactor={cost_factor:.2f} | CostPen={cost_pen:.4f}\n"
-        f" └─ ✅ Final Reward: {reward:.4f}"
+        f" └─ Final Reward: {reward:.4f}"
     )
 
         return reward, {
@@ -457,7 +457,7 @@ class KubernetesEnv:
         total_penalty = negative_contribution
 
         self.logger.info(
-        f"📊 Fuzzy Reward Breakdown | Iter={getattr(self, 'iteration', '?')} | Replicas={self.replica_state}\n"
+        f"Fuzzy Reward Breakdown | Iter={getattr(self, 'iteration', '?')} | Replicas={self.replica_state}\n"
         f" ├─ State Quality: Optimal={reward_state['optimal']:.2f}, Balanced={reward_state['balanced']:.2f}, "
         f"Wasteful={reward_state['wasteful']:.2f}, Critical={reward_state['critical']:.2f}\n"
         f" ├─ Positive Contribution: {positive_contribution:.4f} (Optimal={optimal_contribution:.4f}, Balanced={balanced_contribution:.4f})\n"
@@ -471,7 +471,7 @@ class KubernetesEnv:
         f" ├─ Fuzzy Actions: up={fuzzy_actions['scale_up']:.2f}, down={fuzzy_actions['scale_down']:.2f}, "
         f"stay={fuzzy_actions['no_change']:.2f} | Influence={fuzzy_influence:.3f}\n"
         f" ├─ Replica Ratio: {replica_ratio:.3f} | CostFactor={cost_factor:.2f} | CostPen={cost_pen:.4f}\n"
-        f" └─ ✅ Final Reward: {reward:.4f}"
+        f" └─ Final Reward: {reward:.4f}"
     )
 
         return reward, {
