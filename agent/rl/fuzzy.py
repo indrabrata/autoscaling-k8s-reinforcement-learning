@@ -15,6 +15,7 @@ class Fuzzy:
             else: 
                 return (d - x) / (d - c) if (d - c) != 0 else 0.0
 
+        # All metrics use 0-100% scale for consistency
         self.memberships = {
             "cpu_usage": {
                 "very_low": lambda x: _trapezoidal(x, 0, 0, 10, 25),
@@ -37,6 +38,20 @@ class Fuzzy:
                 "high": lambda x: _trapezoidal(x, 75, 85, 90, 95),
                 "very_high": lambda x: _trapezoidal(x, 90, 95, 100, 100),
             },
+            "request_rate_normalized": {
+                "very_low": lambda x: _trapezoidal(x, 0, 0, 10, 25),
+                "low": lambda x: _trapezoidal(x, 15, 25, 35, 45),
+                "medium": lambda x: _trapezoidal(x, 40, 50, 60, 70),
+                "high": lambda x: _trapezoidal(x, 65, 75, 85, 90),
+                "very_high": lambda x: _trapezoidal(x, 85, 95, 100, 100),
+            },
+            "last_action": {
+                "very_low": lambda x: _trapezoidal(x, 0, 0, 10, 25),
+                "low": lambda x: _trapezoidal(x, 15, 25, 35, 45),
+                "medium": lambda x: _trapezoidal(x, 40, 50, 60, 70),
+                "high": lambda x: _trapezoidal(x, 65, 75, 85, 90),
+                "very_high": lambda x: _trapezoidal(x, 85, 95, 100, 100),
+            },
         }
 
         self.logger = logger or Logger(__name__)
@@ -48,7 +63,7 @@ class Fuzzy:
                 fuzzy_state[metric] = {
                     label: fn(value) for label, fn in self.memberships[metric].items()
                 }
-        self.logger.info(f"Fuzzified: {fuzzy_state}")
+
         return fuzzy_state
 
     def apply_rules(self, fz: Dict[str, Dict[str, float]]) -> Dict[str, float]:
@@ -175,7 +190,6 @@ class Fuzzy:
             ) * 0.7,
         )
 
-        # CRITICAL STATE: Under-provisioned, performance degrading
         critical_state = max(
             # Very high response time is critical regardless of resources
             resp.get("very_high", 0.0) * 1.0,
@@ -226,7 +240,6 @@ class Fuzzy:
             ) * 0.85,
         )
 
-        # Normalize
         total = optimal_state + wasteful_state + critical_state + balanced_state + 1e-6
         res = {
             "optimal": optimal_state / total,

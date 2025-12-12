@@ -39,23 +39,46 @@ class QLearningFuzzy:
         self.logger.info("Initialized QFuzzyHybrid agent")
         self.logger.debug(f"Agent parameters: {self.__dict__}")
 
-    def get_state_key(self, observation: dict) -> Tuple[str, str, str, int, int, int, int]:
+    def get_state_key(self, observation: dict) -> Tuple[str, str, str, str, str, str, str]:
+        """
+        CRITICAL: Extract state key from observation using fuzzy logic.
+
+        State structure:
+        - cpu_label: Fuzzified CPU usage (very_low, low, medium, high, very_high)
+        - mem_label: Fuzzified memory usage (very_low, low, medium, high, very_high)
+        - resp_label: Fuzzified response time (very_low, low, medium, high, very_high)
+        - request_rate_label: Fuzzified request rate (normalized to current capacity) (very_low, low, medium, high, very_high)
+        - request_rate_trend_category: Categorical (up, down, stable)
+        - last_action_label: Fuzzified last action percentage (very_low, low, medium, high, very_high)
+        - action_trend_category: Categorical (up, down, stable)
+
+        Returns:
+            Tuple: State key for Q-table indexing
+        """
         response_time_raw = observation["response_time"]
         if np.isnan(response_time_raw) or response_time_raw is None:
-            response_time = 0
-        else:
-            response_time = int(response_time_raw)
+            observation["response_time"] = 0.0
 
-        observation["response_time"] = response_time
         fuzzy_state = self.fuzzy.fuzzify(observation)
+
         cpu_label = max(fuzzy_state["cpu_usage"], key=fuzzy_state["cpu_usage"].get)
         mem_label = max(fuzzy_state["memory_usage"], key=fuzzy_state["memory_usage"].get)
         resp_label = max(fuzzy_state["response_time"], key=fuzzy_state["response_time"].get)
-        last_action = int(observation["last_action"])
-        action_change = int(observation["action_change"])
-        request_rate = int(observation["request_rate"])
-        request_rate_trend = int(observation["request_rate_trend"])
-        return (cpu_label, mem_label, resp_label, last_action, action_change, request_rate, request_rate_trend)
+        request_rate_label = max(fuzzy_state["request_rate_normalized"], key=fuzzy_state["request_rate_normalized"].get)
+        last_action_label = max(fuzzy_state["last_action"], key=fuzzy_state["last_action"].get)
+
+        request_rate_trend_category = observation["request_rate_trend_category"]
+        action_trend_category = observation["action_trend_category"]
+
+        return (
+            cpu_label,
+            mem_label,
+            resp_label,
+            request_rate_label,
+            request_rate_trend_category,
+            last_action_label,
+            action_trend_category,
+        )
 
     def get_action(self, observation: dict) -> int:
         state_key = self.get_state_key(observation)
@@ -172,17 +195,17 @@ class QLearningFuzzy:
         states_to_show = total_states if max_states is None else min(max_states, total_states)
 
         print(f"Showing {states_to_show}/{total_states} fuzzy Q-table states:\n")
-        print("-" * 120)
-        print(f"{'Idx':<5} {'Fuzzy State (CPU, MEM, RESP)':<45} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}")
-        print("-" * 120)
+        print("-" * 150)
+        print(f"{'Idx':<5} {'State: (CPU, MEM, RESP, ReqRate, ReqTrend, LastAct, ActTrend)':<85} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}")
+        print("-" * 150)
 
         for i, (state_key, actions) in enumerate(self.q_table.items()):
             if i >= states_to_show:
                 break
 
             try:
-                cpu_label, mem_label, resp_label = state_key
-                fuzzy_state_str = f"({cpu_label}, {mem_label}, {resp_label})"
+                cpu_label, mem_label, resp_label, req_rate_label, req_trend_cat, last_act_label, act_trend_cat = state_key
+                fuzzy_state_str = f"({cpu_label}, {mem_label}, {resp_label}, {req_rate_label}, {req_trend_cat}, {last_act_label}, {act_trend_cat})"
             except Exception:
                 fuzzy_state_str = str(state_key)
 

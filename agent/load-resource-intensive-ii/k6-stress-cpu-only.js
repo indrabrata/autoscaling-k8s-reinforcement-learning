@@ -11,12 +11,12 @@ export const options = {
       exec: "cpuTest",
       startVUs: 0,
       stages: [
-        { duration: "30s", target: 50 },  // Warm up
-        { duration: "1m", target: 100 },  // Increase
-        { duration: "1m", target: 200 },  // Push harder
-        { duration: "1m", target: 300 },  // Find limit
-        { duration: "1m", target: 400 },  // Stress to breaking
-        { duration: "30s", target: 0 },   // Ramp down
+        { duration: "30s", target: 50 }, // Warm up
+        { duration: "1m", target: 100 }, // Increase
+        { duration: "1m", target: 200 }, // Push harder
+        { duration: "1m", target: 300 }, // Find limit
+        { duration: "1m", target: 400 }, // Stress to breaking
+        { duration: "30s", target: 0 }, // Ramp down
       ],
       gracefulRampDown: "10s",
     },
@@ -27,7 +27,7 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || "http://10.34.4.150:30080/api/q";
+const BASE_URL = __ENV.BASE_URL || "http://10.34.4.150:30080/api/qfuzzy";
 
 export function cpuTest() {
   const url = `${BASE_URL}/cpu?iterations=200`;

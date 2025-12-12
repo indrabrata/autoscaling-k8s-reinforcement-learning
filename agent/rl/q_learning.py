@@ -39,21 +39,47 @@ class QLearning:
     def add_episode_count(self, count: int = 1):
         self.episodes_trained += count
 
-    def get_state_key(self, observation: dict) -> tuple[int, int, int, int, int, int, int]:
-        cpu = int(observation["cpu_usage"])
-        memory = int(observation["memory_usage"])
-        last_action = int(observation["last_action"])
-        action_change = int(observation["action_change"])
-        request_rate = int(observation["request_rate"])
-        request_rate_trend = int(observation["request_rate_trend"])
+    def get_state_key(self, observation: dict) -> tuple[float, float, float, float, str, float, str]:
+        """
+        Extract state key from observation using real continuous values.
 
+        State structure (continuous values):
+        - cpu_usage: Raw CPU usage percentage (0-100)
+        - memory_usage: Raw memory usage percentage (0-100)
+        - response_time: Raw response time
+        - request_rate: Raw request rate (normalized)
+        - request_rate_trend_category: Categorical (up, down, stable)
+        - last_action: Raw last action value (0-99)
+        - action_trend_category: Categorical (up, down, stable)
+
+        Returns:
+            Tuple: State key for Q-table indexing
+        """
         response_time_raw = observation["response_time"]
         if np.isnan(response_time_raw) or response_time_raw is None:
-            response_time = 0
+            response_time = 0.0
         else:
-            response_time = int(response_time_raw)
+            response_time = response_time_raw
 
-        return (cpu, memory, response_time, last_action, action_change, request_rate, request_rate_trend)
+        # Use real continuous values
+        cpu_usage = observation["cpu_usage"]
+        memory_usage = observation["memory_usage"]
+        request_rate = observation["request_rate_normalized"]
+        last_action = observation["last_action"]
+
+        # Categorical trends (already categorized by environment)
+        request_rate_trend_category = observation["request_rate_trend_category"]
+        action_trend_category = observation["action_trend_category"]
+
+        return (
+            cpu_usage,
+            memory_usage,
+            response_time,
+            request_rate,
+            request_rate_trend_category,
+            last_action,
+            action_trend_category,
+        )
 
     def get_action(self, observation: dict) -> int:
         state_key = self.get_state_key(observation)
@@ -161,17 +187,18 @@ class QLearning:
         states_to_show = total_states if max_states is None else min(max_states, total_states)
 
         print(f"Showing {states_to_show}/{total_states} Q-table states:\n")
-        print("-" * 120)
-        print(f"{'Idx':<5} {'State (CPU, MEM, RESP, ACT)':<45} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}")
-        print("-" * 120)
+        print("-" * 150)
+        print(f"{'Idx':<5} {'State: (CPU, MEM, RESP, ReqRate, ReqTrend, LastAct, ActTrend)':<85} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}")
+        print("-" * 150)
 
         for i, (state_key, actions) in enumerate(self.q_table.items()):
             if i >= states_to_show:
                 break
 
             try:
-                cpu, mem, resp, act = state_key
-                state_str = f"({cpu}, {mem}, {resp}, {act})"
+                # State structure with 7 components (continuous values + categorical trends)
+                cpu, mem, resp, req_rate, req_trend, last_act, act_trend = state_key
+                state_str = f"({cpu:.2f}, {mem:.2f}, {resp:.2f}, {req_rate:.2f}, {req_trend}, {last_act:.2f}, {act_trend})"
             except Exception:
                 state_str = str(state_key)
 
