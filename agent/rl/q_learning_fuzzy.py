@@ -9,7 +9,9 @@ import urllib3
 
 from .fuzzy import Fuzzy
 
+# The "Act=UP" is not a recommendation - it's a historical observation of what actions were taken.
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 class QLearningFuzzy:
     def __init__(
@@ -39,7 +41,9 @@ class QLearningFuzzy:
         self.logger.info("Initialized QFuzzyHybrid agent")
         self.logger.debug(f"Agent parameters: {self.__dict__}")
 
-    def get_state_key(self, observation: dict) -> Tuple[str, str, str, str, str, str, str]:
+    def get_state_key(
+        self, observation: dict
+    ) -> Tuple[str, str, str, str, str, str, str]:
         """
         CRITICAL: Extract state key from observation using fuzzy logic.
 
@@ -62,10 +66,19 @@ class QLearningFuzzy:
         fuzzy_state = self.fuzzy.fuzzify(observation)
 
         cpu_label = max(fuzzy_state["cpu_usage"], key=fuzzy_state["cpu_usage"].get)
-        mem_label = max(fuzzy_state["memory_usage"], key=fuzzy_state["memory_usage"].get)
-        resp_label = max(fuzzy_state["response_time"], key=fuzzy_state["response_time"].get)
-        request_rate_label = max(fuzzy_state["request_rate_normalized"], key=fuzzy_state["request_rate_normalized"].get)
-        last_action_label = max(fuzzy_state["last_action"], key=fuzzy_state["last_action"].get)
+        mem_label = max(
+            fuzzy_state["memory_usage"], key=fuzzy_state["memory_usage"].get
+        )
+        resp_label = max(
+            fuzzy_state["response_time"], key=fuzzy_state["response_time"].get
+        )
+        request_rate_label = max(
+            fuzzy_state["request_rate_normalized"],
+            key=fuzzy_state["request_rate_normalized"].get,
+        )
+        last_action_label = max(
+            fuzzy_state["last_action"], key=fuzzy_state["last_action"].get
+        )
 
         request_rate_trend_category = observation["request_rate_trend_category"]
         action_trend_category = observation["action_trend_category"]
@@ -192,11 +205,15 @@ class QLearningFuzzy:
             return
 
         total_states = len(self.q_table)
-        states_to_show = total_states if max_states is None else min(max_states, total_states)
+        states_to_show = (
+            total_states if max_states is None else min(max_states, total_states)
+        )
 
         print(f"Showing {states_to_show}/{total_states} fuzzy Q-table states:\n")
         print("-" * 150)
-        print(f"{'Idx':<5} {'State: (CPU, MEM, RESP, ReqRate, ReqTrend, LastAct, ActTrend)':<85} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}")
+        print(
+            f"{'Idx':<5} {'State: (CPU, MEM, RESP, ReqRate, ReqTrend, LastAct, ActTrend)':<85} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}"
+        )
         print("-" * 150)
 
         for i, (state_key, actions) in enumerate(self.q_table.items()):
@@ -204,7 +221,15 @@ class QLearningFuzzy:
                 break
 
             try:
-                cpu_label, mem_label, resp_label, req_rate_label, req_trend_cat, last_act_label, act_trend_cat = state_key
+                (
+                    cpu_label,
+                    mem_label,
+                    resp_label,
+                    req_rate_label,
+                    req_trend_cat,
+                    last_act_label,
+                    act_trend_cat,
+                ) = state_key
                 fuzzy_state_str = f"({cpu_label}, {mem_label}, {resp_label}, {req_rate_label}, {req_trend_cat}, {last_act_label}, {act_trend_cat})"
             except Exception:
                 fuzzy_state_str = str(state_key)
@@ -213,7 +238,9 @@ class QLearningFuzzy:
             best_value = float(np.max(actions))
             avg_value = float(np.mean(actions))
 
-            print(f"{i+1:<5} {fuzzy_state_str:<45} {best_action:<8} {best_value:<10.4f} {avg_value:<10.4f}")
+            print(
+                f"{i + 1:<5} {fuzzy_state_str:<45} {best_action:<8} {best_value:<10.4f} {avg_value:<10.4f}"
+            )
 
             print(" " * 7 + "Q-Values (Action → Value):")
             actions_per_row = 10
@@ -233,5 +260,3 @@ class QLearningFuzzy:
 
         print("End of full fuzzy Q-table summary.")
         print("=" * 120 + "\n")
-
-

@@ -1,6 +1,7 @@
 import ast
 import os
 import time
+
 from dotenv import load_dotenv
 
 from database.influxdb import InfluxDB
@@ -8,7 +9,6 @@ from environment.environment import KubernetesEnv
 from rl.q_learning import QLearning
 from rl.q_learning_fuzzy import QLearningFuzzy
 from utils.logger import log_verbose_details, setup_logger
-
 
 load_dotenv()
 
@@ -62,7 +62,9 @@ if __name__ == "__main__":
         response_time_weight=float(os.getenv("RESPONSE_TIME_WEIGHT", "1.0")),
         cpu_memory_weight=float(os.getenv("CPU_MEMORY_WEIGHT", "0.5")),
         cost_weight=float(os.getenv("COST_WEIGHT", "0.3")),
-        request_rate_per_pod_capacity=float(os.getenv("REQUEST_RATE_PER_POD_CAPACITY", "80.0")),
+        request_rate_per_pod_capacity=float(
+            os.getenv("REQUEST_RATE_PER_POD_CAPACITY", "80.0")
+        ),
         algorithm=choose_algorithm,
     )
 
@@ -87,29 +89,28 @@ if __name__ == "__main__":
             created_at=start_time,
             logger=logger,
         )
-        
+
     else:
         raise ValueError(f"Unsupported algorithm: {choose_algorithm}")
-    
+
     model_path = os.getenv("MODEL_PATH", "")
     if model_path == "":
         raise ValueError(f"Invalid model path: {model_path}")
-      
+
     agent.load_model(model_path)
     agent.epsilon = 0
     obs = env.reset()
-    
-    while True:
-      act = agent.get_action(obs)
-      nxt, rew, term, info = env.step(act)
-      obs = nxt
-      
-      logger.debug(f"Observation type: {type(obs)}, value: {obs}")
 
-      log_verbose_details(
-          observation=obs,
-          agent=agent,
-          verbose=True,
-          logger=logger,
-      )
-   
+    while True:
+        act = agent.get_action(obs)
+        nxt, rew, term, info = env.step(act, q_table_size=len(agent.q_table))
+        obs = nxt
+
+        logger.debug(f"Observation type: {type(obs)}, value: {obs}")
+
+        log_verbose_details(
+            observation=obs,
+            agent=agent,
+            verbose=True,
+            logger=logger,
+        )

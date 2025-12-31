@@ -116,7 +116,7 @@ class Trainer:
                 total = 0.0
                 while True:
                     act = self.agent.get_action(obs)
-                    nxt, rew, term, info = self.env.step(act)
+                    nxt, rew, term, info = self.env.step(act, q_table_size=len(self.agent.q_table))
                     self.agent.update_q_table(obs, act, rew, nxt)
                     total += rew
                     obs = nxt

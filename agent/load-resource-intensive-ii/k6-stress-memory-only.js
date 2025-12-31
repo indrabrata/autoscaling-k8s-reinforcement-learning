@@ -40,3 +40,5 @@ export function memoryTest() {
 
   sleep(1);
 }
+
+// first try 60/s

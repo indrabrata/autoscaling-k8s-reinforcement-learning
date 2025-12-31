@@ -12,10 +12,10 @@ export const options = {
       startVUs: 0,
       stages: [
         { duration: "30s", target: 50 }, // Warm up
-        { duration: "1m", target: 100 }, // Increase
-        { duration: "1m", target: 200 }, // Push harder
-        { duration: "1m", target: 300 }, // Find limit
-        { duration: "1m", target: 400 }, // Stress to breaking
+        { duration: "1m", target: 100 }, // Ramp
+        { duration: "1m", target: 150 }, // Build pressure
+        { duration: "1m", target: 200 }, // Near peak
+        { duration: "1m", target: 250 }, // Max load
         { duration: "30s", target: 0 }, // Ramp down
       ],
       gracefulRampDown: "10s",

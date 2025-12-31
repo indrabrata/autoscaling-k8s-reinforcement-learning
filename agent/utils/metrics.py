@@ -4,6 +4,7 @@ import time
 import numpy as np
 from prometheus_api_client import PrometheusApiClientException, PrometheusConnect
 
+
 def _build_scope_ready_query(namespace: str, deployment_name: str) -> str:
     """Build the base query for filtering ready pods in a deployment."""
     return f"""
@@ -87,15 +88,17 @@ def _build_memory_limits_query(namespace: str, scope_ready: str) -> str:
 def _build_request_rate_query(
     namespace: str, deployment_name: str, interval: int = 15
 ) -> str:
-    """Build request rate query for the deployment."""
+    """Build request rate query for the deployment, excluding health checks and metrics."""
     return f"""
     sum(
         rate(app_requests_total{{
             namespace="{namespace}",
-            pod=~"{deployment_name}-.*"
+            pod=~"{deployment_name}-.*",
+            exported_endpoint!~"/metrics|/healthz"
         }}[{interval}s])
     )
     """
+
 
 def _extract_limits_by_pod(results: list) -> dict[str, float]:
     """Extract resource limits indexed by pod name."""
@@ -313,8 +316,7 @@ def _fetch_metric_with_retry(
 
         if len(results) != expected_count:
             logger.debug(
-                f"Expected {expected_count} {metric_name} results, "
-                f"got {len(results)}"
+                f"Expected {expected_count} {metric_name} results, got {len(results)}"
             )
             time.sleep(1)
             continue
@@ -406,7 +408,9 @@ def get_metrics(
         memory_query = _build_memory_usage_query(namespace, scope_ready)
         cpu_limits_query = _build_cpu_limits_query(namespace, scope_ready)
         memory_limits_query = _build_memory_limits_query(namespace, scope_ready)
-        request_rate_query = _build_request_rate_query(namespace, deployment_name, interval)
+        request_rate_query = _build_request_rate_query(
+            namespace, deployment_name, interval
+        )
 
         logger.debug("Metrics queries prepared, querying Prometheus...")
         logger.debug(f"CPU Query: {cpu_query}")
@@ -459,7 +463,7 @@ def get_metrics(
                 quantile=quantile,
                 logger=logger,
             )
-            
+
             request_rate = _get_request_rate(
                 prometheus=prometheus,
                 rps_query=request_rate_query,

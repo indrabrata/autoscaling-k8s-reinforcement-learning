@@ -3,12 +3,14 @@ import time
 from logging import Logger
 from typing import Dict, Optional, Tuple
 
-from database.influxdb import InfluxDB
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
 from prometheus_api_client import PrometheusConnect
+
+from database.influxdb import InfluxDB
 from rl.fuzzy import Fuzzy
 from utils import get_metrics, wait_for_pods_ready
+
 
 class KubernetesEnv:
     def __init__(
@@ -40,7 +42,7 @@ class KubernetesEnv:
         cpu_memory_weight: float = 0.5,
         cost_weight: float = 0.3,
         request_rate_per_pod_capacity: float = 80.0,
-        algorithm: str = "Q"
+        algorithm: str = "Q",
     ) -> None:
         self.logger = logger
         config.load_kube_config()
@@ -82,7 +84,9 @@ class KubernetesEnv:
 
         # This value should be determined through load testing on a single pod
         # See: k6 capacity test script for finding this value
-        self.per_pod_capacity = request_rate_per_pod_capacity  # requests per second that one pod can handle
+        self.per_pod_capacity = (
+            request_rate_per_pod_capacity  # requests per second that one pod can handle
+        )
 
         # Initialize state tracking variables
         self.request_rate = 0.0
@@ -93,6 +97,11 @@ class KubernetesEnv:
         # Used to detect scaling patterns (increasing, decreasing, stable, oscillating)
         self.action_history = []
         self.action_trend_window = 5  # Number of previous actions to consider for trend
+
+        # Track cumulative reward for sample efficiency analysis
+        self.cumulative_reward = 0.0
+        self.episode_number = 0
+        self.episode_reward = 0.0  # Reset per episode - total reward for current episode only
 
         if self.algorithm == "Q-LEARNING-FUZZY":
             self.fuzzy = Fuzzy(logger=logger)
@@ -190,19 +199,28 @@ class KubernetesEnv:
         """
         Considers resource utilization, request rate handling, and scaling behavior.
         """
-        if self.response_time is None or math.isnan(self.response_time) or math.isinf(self.response_time):
+        if (
+            self.response_time is None
+            or math.isnan(self.response_time)
+            or math.isinf(self.response_time)
+        ):
             self.response_time = 0.0
 
-        response_time_percentage: float = (self.response_time / self.max_response_time) * 100.0
-        replica_ratio: float = (self.replica_state - self.min_replicas) / self.range_replicas
+        response_time_percentage: float = (
+            self.response_time / self.max_response_time
+        ) * 100.0
+        replica_ratio: float = (
+            self.replica_state - self.min_replicas
+        ) / self.range_replicas
 
         current_capacity: float = self.per_pod_capacity * self.replica_state
-        request_rate_normalized: float = min(100.0, (self.request_rate / current_capacity) * 100.0)
+        request_rate_normalized: float = min(
+            100.0, (self.request_rate / current_capacity) * 100.0
+        )
 
         observation: dict = self._get_observation()
         request_trend: str = observation.get("request_rate_trend_category", "stable")
         action_trend: str = observation.get("action_trend_category", "stable")
-
 
         # OPTIMAL STATE: Resources well-utilized, response time excellent, request rate handled well
         # CPU/MEM in target range, response time low, request rate not saturating
@@ -218,8 +236,11 @@ class KubernetesEnv:
             optimal_score = 0.8
         elif cpu_in_range and mem_in_range and resp_good:
             optimal_score = 0.7
-        elif (self.min_cpu <= self.cpu_usage <= self.max_cpu * 1.1) and \
-             (self.min_memory <= self.memory_usage <= self.max_memory * 1.1) and resp_good:
+        elif (
+            (self.min_cpu <= self.cpu_usage <= self.max_cpu * 1.1)
+            and (self.min_memory <= self.memory_usage <= self.max_memory * 1.1)
+            and resp_good
+        ):
             optimal_score = 0.5
         else:
             optimal_score = 0.0
@@ -235,7 +256,11 @@ class KubernetesEnv:
             balanced_score = 1.0
         elif cpu_moderate and mem_moderate and resp_acceptable:
             balanced_score = 0.7
-        elif (30 <= self.cpu_usage <= 80) and (30 <= self.memory_usage <= 80) and resp_acceptable:
+        elif (
+            (30 <= self.cpu_usage <= 80)
+            and (30 <= self.memory_usage <= 80)
+            and resp_acceptable
+        ):
             balanced_score = 0.5
         else:
             balanced_score = 0.0
@@ -274,9 +299,9 @@ class KubernetesEnv:
             critical_score = 1.0
         elif resp_high and (cpu_high or mem_high):
             critical_score = 0.9
-        elif req_rate_normalized > 85.0 and (cpu_high or mem_high):
+        elif request_rate_normalized > 85.0 and (cpu_high or mem_high):
             critical_score = 0.8  # High request rate with high resources
-        elif (cpu_very_high or mem_very_high):
+        elif cpu_very_high or mem_very_high:
             critical_score = 0.7
         elif resp_high:
             critical_score = 0.6
@@ -287,7 +312,9 @@ class KubernetesEnv:
         optimal_contribution = optimal_score * 1.0
         balanced_contribution = balanced_score * 0.7
         wasteful_penalty = wasteful_score * self.cost_weight * 1.5
-        critical_penalty = critical_score * (self.response_time_weight + self.cpu_memory_weight)
+        critical_penalty = critical_score * (
+            self.response_time_weight + self.cpu_memory_weight
+        )
 
         positive_contribution = optimal_contribution + balanced_contribution
         negative_contribution = wasteful_penalty + critical_penalty
@@ -325,9 +352,17 @@ class KubernetesEnv:
 
         # Reactive penalty: penalize late response to trends
         reactive_penalty = 0.0
-        if request_trend == "up" and request_rate_normalized > 75.0 and action_trend == "stable":
+        if (
+            request_trend == "up"
+            and request_rate_normalized > 75.0
+            and action_trend == "stable"
+        ):
             reactive_penalty = 0.05  # Bad: not scaling when should
-        elif request_trend == "up" and request_rate_normalized > 75.0 and action_trend == "down":
+        elif (
+            request_trend == "up"
+            and request_rate_normalized > 75.0
+            and action_trend == "down"
+        ):
             reactive_penalty = 0.08  # Very bad: scaling down when load increasing
 
         # Oscillation penalty: penalize unstable action patterns
@@ -424,13 +459,21 @@ class KubernetesEnv:
         """
         Uses fuzzy logic to evaluate state quality considering all metrics and trends.
         """
-        if self.response_time is None or math.isnan(self.response_time) or math.isinf(self.response_time):
+        if (
+            self.response_time is None
+            or math.isnan(self.response_time)
+            or math.isinf(self.response_time)
+        ):
             self.response_time = 0.0
 
-        response_time_percentage: float = (self.response_time / self.max_response_time) * 100.0
+        response_time_percentage: float = (
+            self.response_time / self.max_response_time
+        ) * 100.0
 
         current_capacity: float = self.per_pod_capacity * self.replica_state
-        request_rate_normalized: float = min(100.0, (self.request_rate / current_capacity) * 100.0)
+        request_rate_normalized: float = min(
+            100.0, (self.request_rate / current_capacity) * 100.0
+        )
 
         observation: dict = {
             "cpu_usage": self.cpu_usage,
@@ -441,7 +484,9 @@ class KubernetesEnv:
 
         # Get observation for trend categories
         full_observation: dict = self._get_observation()
-        request_trend: str = full_observation.get("request_rate_trend_category", "stable")
+        request_trend: str = full_observation.get(
+            "request_rate_trend_category", "stable"
+        )
         action_trend: str = full_observation.get("action_trend_category", "stable")
 
         # Fuzzify the metrics
@@ -471,7 +516,9 @@ class KubernetesEnv:
         wasteful_penalty = reward_state["wasteful"] * self.cost_weight * 1.5
 
         # Critical state creates strong penalty (under-provisioned, performance issues)
-        critical_penalty = reward_state["critical"] * (self.response_time_weight + self.cpu_memory_weight)
+        critical_penalty = reward_state["critical"] * (
+            self.response_time_weight + self.cpu_memory_weight
+        )
 
         # Combine contributions
         positive_contribution = optimal_contribution + balanced_contribution
@@ -511,14 +558,26 @@ class KubernetesEnv:
 
         # Reactive penalty: penalize late response to trends
         reactive_penalty = 0.0
-        if request_trend == "up" and request_rate_normalized > 75.0 and action_trend == "stable":
+        if (
+            request_trend == "up"
+            and request_rate_normalized > 75.0
+            and action_trend == "stable"
+        ):
             reactive_penalty = 0.05  # Bad: not scaling when should
-        elif request_trend == "up" and request_rate_normalized > 75.0 and action_trend == "down":
+        elif (
+            request_trend == "up"
+            and request_rate_normalized > 75.0
+            and action_trend == "down"
+        ):
             reactive_penalty = 0.08  # Very bad: scaling down when load increasing
 
         # Oscillation penalty: penalize unstable action patterns
         oscillation_penalty = 0.0
-        if action_trend == "stable" and reward_state["balanced"] < 0.3 and reward_state["critical"] > 0.5:
+        if (
+            action_trend == "stable"
+            and reward_state["balanced"] < 0.3
+            and reward_state["critical"] > 0.5
+        ):
             oscillation_penalty = 0.02  # Bad: not taking action when needed
 
         # Request rate handling bonus (fuzzy-based)
@@ -546,19 +605,16 @@ class KubernetesEnv:
 
         # Calculate individual penalties for logging compatibility
         cpu_pen = (
-            cpu_fz.get("very_high", 0.0) * 1.0 +
-            cpu_fz.get("high", 0.0) * 0.7 +
-            cpu_fz.get("very_low", 0.0) * 0.5
+            cpu_fz.get("very_high", 0.0) * 1.0
+            + cpu_fz.get("high", 0.0) * 0.7
+            + cpu_fz.get("very_low", 0.0) * 0.5
         )
         mem_pen = (
-            mem_fz.get("very_high", 0.0) * 1.0 +
-            mem_fz.get("high", 0.0) * 0.7 +
-            mem_fz.get("very_low", 0.0) * 0.5
+            mem_fz.get("very_high", 0.0) * 1.0
+            + mem_fz.get("high", 0.0) * 0.7
+            + mem_fz.get("very_low", 0.0) * 0.5
         )
-        resp_pen = (
-            resp_fz.get("very_high", 0.0) * 1.0 +
-            resp_fz.get("high", 0.0) * 0.8
-        )
+        resp_pen = resp_fz.get("very_high", 0.0) * 1.0 + resp_fz.get("high", 0.0) * 0.8
         cpu_mem_pen = self.cpu_memory_weight * (cpu_pen + mem_pen)
         total_penalty = negative_contribution
 
@@ -622,7 +678,6 @@ class KubernetesEnv:
         else:
             return self._calculate_reward_qlearning()
 
-
     def _scale_and_get_metrics(self) -> None:
         self._scale()
         increase: int = self.replica_state > self.replica_state_old
@@ -683,7 +738,7 @@ class KubernetesEnv:
         if len(self.action_history) < 2:
             return 0.0
 
-        history = self.action_history[-self.action_trend_window:]
+        history = self.action_history[-self.action_trend_window :]
         n = len(history)
 
         if n < 3:
@@ -693,10 +748,13 @@ class KubernetesEnv:
         # Linear regression slope: measures if actions are trending up/down
         # Formula: (n*sum(xy) - sum(x)*sum(y)) / (n*sum(x^2) - (sum(x))^2)
         import numpy as np
+
         x = np.arange(n)
         y = np.array(history)
 
-        slope = (n * np.sum(x * y) - np.sum(x) * np.sum(y)) / (n * np.sum(x**2) - np.sum(x)**2 + 1e-10)
+        slope = (n * np.sum(x * y) - np.sum(x) * np.sum(y)) / (
+            n * np.sum(x**2) - np.sum(x) ** 2 + 1e-10
+        )
 
         # Scale slope to meaningful range
         scaled_slope = slope * self.action_trend_window
@@ -730,7 +788,9 @@ class KubernetesEnv:
         # Accounts for current number of replicas to provide meaningful percentage
         # Example: 80 req/s with 1 pod (80 capacity) = 100%, but with 10 pods (800 capacity) = 10%
         current_capacity: float = self.per_pod_capacity * self.replica_state
-        request_rate_normalized: float = min(100.0, (self.request_rate / current_capacity) * 100.0)
+        request_rate_normalized: float = min(
+            100.0, (self.request_rate / current_capacity) * 100.0
+        )
 
         request_rate_trend_category: str = self._categorize_request_rate_trend()
         action_trend_category: str = self._categorize_action_trend()
@@ -740,20 +800,19 @@ class KubernetesEnv:
             "cpu_usage": self.cpu_usage,
             "memory_usage": self.memory_usage,
             "response_time": response_time_percentage,
-
+            "response_time_ms": self.response_time,  # Raw value in milliseconds for logging
             # Request rate metrics
             "request_rate": self.request_rate,  # Raw value for logging
             "request_rate_normalized": request_rate_normalized,  # Percentage of current capacity
             "request_rate_trend": self.request_rate_trend,  # Raw difference
             "request_rate_trend_category": request_rate_trend_category,  # Categorical: up/down/stable
-
             # Action and system state
             "last_action": self.last_action,  # Action as percentage (0-99 representing min to max replicas)
             "action_trend_category": action_trend_category,  # Categorical: up/down/stable
             "current_replicas": float(self.replica_state),  # Absolute replica count
         }
 
-    def step(self, action: int) -> tuple[dict[str, float], float, bool, dict]:
+    def step(self, action: int, q_table_size: int = 0) -> tuple[dict[str, float], float, bool, dict]:
         # Calculate action change before updating last_action
         self.action_change = action - self.last_action
         self.last_action = action
@@ -765,9 +824,7 @@ class KubernetesEnv:
 
         self.previous_request_rate = self.request_rate
 
-        percentage = (
-            (action / 99.0) if len(self.action_space) > 1 else 0.0
-        )
+        percentage = (action / 99.0) if len(self.action_space) > 1 else 0.0
         self.replica_state_old = self.replica_state
         self.replica_state = round(self.min_replicas + percentage * self.range_replicas)
         self.replica_state = max(
@@ -791,28 +848,47 @@ class KubernetesEnv:
             "reward": reward,
             "terminated": terminated,
             "iteration": self.iteration,
-
             # System state
             "replica_state": self.replica_state,
-
-            # Core metrics
+            # Core metrics - raw values
             "cpu_usage": self.cpu_usage,
             "memory_usage": self.memory_usage,
             "response_time": self.response_time,
-            "response_time_pct": observation["response_time"],
-
-            # Request rate metrics
             "request_rate": self.request_rate,
-            "request_rate_normalized": observation["request_rate_normalized"],
-            "request_rate_trend": self.request_rate_trend,
-            "request_rate_trend_category": observation["request_rate_trend_category"],
+            # Percentages
+            "response_time_percentage": reward_breakdown.get(
+                "response_time_percentage", 0.0
+            ),
+            # Include full breakdown for observation (not saved to InfluxDB)
+            **observation,
+            **reward_breakdown,
+        }
 
-            # Action metrics - last_action is 0-99 representing scaling percentage
-            "last_action": self.last_action,
-            "action_change": self.action_change,
-            "action_trend_category": observation["action_trend_category"],
+        # Clean info for InfluxDB - only essential metrics
+        # Accumulate rewards for sample efficiency tracking
+        self.cumulative_reward += reward
+        self.episode_reward += reward
 
-            **reward_breakdown,  # Include detailed reward breakdown
+        influxdb_fields = {
+            "action": action,
+            "reward": reward,
+            "cumulative_reward": self.cumulative_reward,
+            "episode_reward": self.episode_reward,
+            "episode_number": self.episode_number,
+            "q_table_size": q_table_size,
+            "terminated": int(terminated),
+            "iteration": self.iteration,
+            "replica_state": self.replica_state,
+            "cpu_usage": self.cpu_usage,
+            "memory_usage": self.memory_usage,
+            "response_time": self.response_time,
+            "request_rate": self.request_rate,
+            "request_rate_normalized": reward_breakdown.get(
+                "request_rate_normalized", 0.0
+            ),
+            "response_time_percentage": reward_breakdown.get(
+                "response_time_percentage", 0.0
+            ),
         }
 
         if self.influxdb:
@@ -823,7 +899,7 @@ class KubernetesEnv:
                     "deployment": self.deployment_name,
                     "algorithm": self.algorithm,
                 },
-                fields={**info},
+                fields=influxdb_fields,
             )
         return observation, reward, terminated, info
 
@@ -841,5 +917,10 @@ class KubernetesEnv:
         self.last_action = 0
 
         self.action_history = []
+
+        # Reset episode-specific metrics and increment episode counter
+        self.cumulative_reward = 0.0
+        self.episode_reward = 0.0  # Reset for new episode
+        self.episode_number += 1
 
         return self._get_observation()
