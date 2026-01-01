@@ -72,9 +72,9 @@ if __name__ == "__main__":
         agent = QLearning(
             learning_rate=float(os.getenv("LEARNING_RATE", 0.1)),
             discount_factor=float(os.getenv("DISCOUNT_FACTOR", 0.95)),
-            epsilon_start=0,
-            epsilon_decay=0,
-            epsilon_min=0,
+            epsilon_start=float(os.getenv("EPSILON_START", 0.1)),
+            epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.99)),
+            epsilon_min=float(os.getenv("EPSILON_MIN", 0.01)),
             created_at=start_time,
             logger=logger,
         )
@@ -83,9 +83,9 @@ if __name__ == "__main__":
         agent = QLearningFuzzy(
             learning_rate=float(os.getenv("LEARNING_RATE", 0.1)),
             discount_factor=float(os.getenv("DISCOUNT_FACTOR", 0.95)),
-            epsilon_start=0,
-            epsilon_decay=0,
-            epsilon_min=0,
+            epsilon_start=float(os.getenv("EPSILON_START", 0.1)),
+            epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.99)),
+            epsilon_min=float(os.getenv("EPSILON_MIN", 0.01)),
             created_at=start_time,
             logger=logger,
         )

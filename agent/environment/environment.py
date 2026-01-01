@@ -389,8 +389,10 @@ class KubernetesEnv:
         if balanced_score > 0.7:
             reward += 0.03
 
-        # Clamp reward to [0, 1]
-        reward = max(min(reward, 1.0), 0.0)
+        # NOTE: No clamping - preserve actual reward values including:
+        # - Very small positive values (e.g., 0.0000001)
+        # - Negative values (important learning signal for bad states)
+        # - Values > 1.0 (rare but possible for exceptional performance)
 
         # Calculate individual penalties for logging
         if self.cpu_usage < self.min_cpu:
@@ -600,8 +602,10 @@ class KubernetesEnv:
         if reward_state["balanced"] > 0.7:
             reward += 0.03
 
-        # Clamp reward to [0, 1]
-        reward = max(min(reward, 1.0), 0.0)
+        # NOTE: No clamping - preserve actual reward values including:
+        # - Very small positive values (e.g., 0.0000001)
+        # - Negative values (important learning signal for bad states)
+        # - Values > 1.0 (rare but possible for exceptional performance)
 
         # Calculate individual penalties for logging compatibility
         cpu_pen = (
