@@ -101,15 +101,119 @@ class KubernetesEnv:
         # Track cumulative reward for sample efficiency analysis
         self.cumulative_reward = 0.0
         self.episode_number = 0
-        self.episode_reward = 0.0  # Reset per episode - total reward for current episode only
+        self.episode_reward = (
+            0.0  # Reset per episode - total reward for current episode only
+        )
 
         if self.algorithm == "Q-LEARNING-FUZZY":
             self.fuzzy = Fuzzy(logger=logger)
         else:
             self.fuzzy = None
 
-        self.logger.info("Initialized KubernetesEnv environment")
-        self.logger.debug(f"Environment configuration: {self.__dict__}")
+        self._log_environment_config()
+
+    def _log_environment_config(self):
+        """Log comprehensive environment configuration for debugging"""
+        self.logger.info("=" * 100)
+        self.logger.info("KUBERNETES ENVIRONMENT CONFIGURATION")
+        self.logger.info("=" * 100)
+
+        self.logger.info("📊 TRAINING PARAMETERS:")
+        self.logger.info(f"  Algorithm:              {self.algorithm}")
+        self.logger.info(f"  Episodes:               {self.iteration}")
+        self.logger.info(f"  Namespace:              {self.namespace}")
+        self.logger.info(f"  Deployment:             {self.deployment_name}")
+
+        self.logger.info("")
+        self.logger.info("🎯 SCALING PARAMETERS:")
+        self.logger.info(f"  Min Replicas:           {self.min_replicas}")
+        self.logger.info(f"  Max Replicas:           {self.max_replicas}")
+        self.logger.info(f"  Replica Range:          {self.range_replicas}")
+
+        self.logger.info("")
+        self.logger.info("📈 RESOURCE THRESHOLDS:")
+        self.logger.info(f"  Min CPU:                {self.min_cpu}%")
+        self.logger.info(f"  Max CPU:                {self.max_cpu}%")
+        self.logger.info(f"  Min Memory:             {self.min_memory}%")
+        self.logger.info(f"  Max Memory:             {self.max_memory}%")
+        self.logger.info(f"  Max Response Time:      {self.max_response_time}ms")
+
+        self.logger.info("")
+        self.logger.info("🚦 CAPACITY & LOAD:")
+        self.logger.info(f"  Request Rate Per Pod:   {self.per_pod_capacity} RPS")
+        self.logger.info(f"  Metrics Interval:       {self.metrics_interval}s")
+        self.logger.info(
+            f"  Response Time Quantile: P{int(self.metrics_quantile * 100)}"
+        )
+
+        self.logger.info("")
+        self.logger.info("⚖️  REWARD WEIGHTS:")
+        self.logger.info(f"  Response Time Weight:   {self.response_time_weight}")
+        self.logger.info(f"  CPU/Memory Weight:      {self.cpu_memory_weight}")
+        self.logger.info(f"  Cost Weight:            {self.cost_weight}")
+
+        self.logger.info("")
+        self.logger.info("⏱️  TIMING PARAMETERS:")
+        self.logger.info(f"  Timeout:                {self.timeout}s")
+        self.logger.info(f"  Wait Time:              {self.wait_time}s")
+        self.logger.info(f"  Max Scaling Retries:    {self.max_scaling_retries}")
+
+        self.logger.info("")
+        self.logger.info("🔍 REWARD CALCULATION FORMULA:")
+        self.logger.info("  For Optimal State (CPU/MEM in range, RT good, RPS good):")
+        self.logger.info(
+            "    → Positive contribution: optimal_score * 1.0 + balanced_score * 0.7"
+        )
+        self.logger.info("  ")
+        self.logger.info("  For Wasteful State (CPU/MEM < min, over-provisioned):")
+        self.logger.info(
+            f"    → Wasteful penalty: wasteful_score * {self.cost_weight} * 1.5"
+        )
+        self.logger.info("  ")
+        self.logger.info(
+            "  For Critical State (CPU/MEM > max, RT high, RPS saturating):"
+        )
+        self.logger.info(
+            f"    → Critical penalty: critical_score * ({self.response_time_weight} + {self.cpu_memory_weight})"
+        )
+        self.logger.info("  ")
+        self.logger.info("  Final Reward:")
+        self.logger.info(
+            "    reward = positive_contribution / (1 + negative_contribution)"
+        )
+        self.logger.info("    reward -= cost_penalty (based on replica ratio)")
+        self.logger.info("    reward += proactive/reactive bonuses (trend-based)")
+        self.logger.info("    ⚠️  NO CLAMPING - rewards can be negative!")
+
+        self.logger.info("")
+        self.logger.info("💡 CAPACITY CALCULATION EXAMPLES:")
+        for replicas in [1, 3, 5, 10]:
+            capacity = self.per_pod_capacity * replicas
+            self.logger.info(f"  {replicas} pod(s):  {capacity:.0f} RPS capacity")
+            # Example normalized values
+            for rps in [25, 50, 100]:
+                if rps <= capacity:
+                    normalized = (rps / capacity) * 100
+                    self.logger.info(
+                        f"    └─ {rps} RPS → {normalized:.1f}% utilization"
+                    )
+
+        self.logger.info("")
+        self.logger.info("⚠️  CRITICAL THRESHOLDS:")
+        self.logger.info(
+            f"  Wasteful Trigger:  CPU < {self.min_cpu}% OR Memory < {self.min_memory}%"
+        )
+        self.logger.info(
+            f"  Critical Trigger:  CPU > {self.max_cpu}% OR Memory > {self.max_memory}%"
+        )
+        self.logger.info(f"  RPS Saturating:    Request Rate Normalized > 90%")
+        self.logger.info(
+            f"  RT Critical:       Response Time > 100% of {self.max_response_time}ms"
+        )
+
+        self.logger.info("=" * 100)
+        self.logger.info("Environment initialized successfully!")
+        self.logger.info("=" * 100)
 
     def _scale(self) -> None:
         HTTP_INTERNAL_SERVER_ERROR = 500
@@ -197,7 +301,29 @@ class KubernetesEnv:
 
     def _calculate_reward_qlearning(self) -> Tuple[float, Dict[str, float]]:
         """
-        Considers resource utilization, request rate handling, and scaling behavior.
+        UNIFIED REWARD FUNCTION - Used by BOTH Q-Learning and Q-Fuzzy
+
+        This reward function evaluates the quality of the current state by considering:
+        1. Resource utilization (CPU, Memory)
+        2. Response time performance
+        3. Request rate handling
+        4. Cost efficiency (replica count)
+        5. Proactive/reactive scaling behavior
+
+        IMPORTANT: Both algorithms use this SAME reward function!
+        - Q-Learning: Evaluates reward for raw continuous states
+        - Q-Fuzzy: Evaluates reward for fuzzified states
+
+        The difference is NOT in the reward calculation, but in STATE REPRESENTATION:
+        - Q-Learning state: (cpu=45.5%, mem=60.2%, rt=800ms, ...)
+        - Q-Fuzzy state: (cpu=medium, mem=high, rt=medium, ...)
+
+        This ensures fair comparison where the ONLY variable is state abstraction.
+
+        Returns:
+            tuple: (reward, breakdown_dict)
+                - reward: float, can be negative (no clamping)
+                - breakdown: dict with detailed reward components
         """
         if (
             self.response_time is None
@@ -318,6 +444,32 @@ class KubernetesEnv:
 
         positive_contribution = optimal_contribution + balanced_contribution
         negative_contribution = wasteful_penalty + critical_penalty
+
+        # ========================================================================================================
+        # NEUTRAL STATE BASELINE REWARD
+        # ========================================================================================================
+        # Problem: Many states fall between categories (not optimal, not balanced, not wasteful, not critical)
+        # Solution: Give small baseline reward for "acceptable" states to reduce sparse rewards
+        # This creates a smoother gradient: bad → neutral → acceptable → good → optimal
+        # ========================================================================================================
+
+        if positive_contribution == 0.0 and negative_contribution == 0.0:
+            # State doesn't fit any category - check if it's at least "acceptable"
+            cpu_acceptable = 20 <= self.cpu_usage <= 80
+            mem_acceptable = 20 <= self.memory_usage <= 80
+            resp_acceptable = response_time_percentage <= 100.0
+            req_acceptable = request_rate_normalized <= 85.0
+
+            if cpu_acceptable and mem_acceptable and resp_acceptable and req_acceptable:
+                # Give small baseline reward for acceptable (but not optimal) state
+                neutral_baseline = 0.2
+                positive_contribution = neutral_baseline
+
+                self.logger.debug(
+                    f"Neutral state detected: CPU={self.cpu_usage:.1f}%, "
+                    f"MEM={self.memory_usage:.1f}%, RT={response_time_percentage:.1f}%, "
+                    f"RPS={request_rate_normalized:.1f}% → baseline reward={neutral_baseline}"
+                )
 
         # Base reward formula
         if negative_contribution > 0:
@@ -457,9 +609,30 @@ class KubernetesEnv:
             "negative_contribution": negative_contribution,
         }
 
-    def _calculate_reward_qlearningfuzzy(self) -> Tuple[float, Dict[str, float]]:
+    # ========================================================================================================
+    # DEPRECATED REWARD FUNCTION - KEPT FOR REFERENCE ONLY
+    # ========================================================================================================
+    # This function is NO LONGER USED. Both Q-Learning and Q-Fuzzy now use _calculate_reward_qlearning()
+    # to ensure fair comparison with identical reward signals.
+    #
+    # WHY DEPRECATED:
+    # - Old approach: Different reward functions for Q-Learning vs Q-Fuzzy
+    # - Problem: Can't isolate the benefit of fuzzy state abstraction
+    # - New approach: Same reward function, different state representation only
+    #
+    # KEPT FOR HISTORICAL REFERENCE:
+    # - Shows original fuzzy-based reward calculation
+    # - Can be restored if needed for experiments
+    # ========================================================================================================
+
+    def _calculate_reward_qlearningfuzzy_OLD_DEPRECATED(
+        self,
+    ) -> Tuple[float, Dict[str, float]]:
         """
-        Uses fuzzy logic to evaluate state quality considering all metrics and trends.
+        OLD DEPRECATED FUNCTION - DO NOT USE
+
+        Previously used fuzzy logic to evaluate state quality considering all metrics and trends.
+        Now replaced with unified reward function for fair comparison.
         """
         if (
             self.response_time is None
@@ -676,11 +849,18 @@ class KubernetesEnv:
         }
 
     def _calculate_reward(self) -> Tuple[float, Dict[str, float]]:
-        """Route to appropriate reward calculation based on algorithm"""
-        if self.algorithm == "Q-LEARNING-FUZZY":
-            return self._calculate_reward_qlearningfuzzy()
-        else:
-            return self._calculate_reward_qlearning()
+        """
+        Unified reward calculation for both Q-Learning and Q-Fuzzy.
+
+        IMPORTANT: Both algorithms now use the SAME reward function!
+        The ONLY difference is state representation:
+        - Q-Learning: Stores Q-values for raw continuous states
+        - Q-Fuzzy: Stores Q-values for fuzzified states
+
+        This ensures fair comparison - same reward signal, different state abstraction.
+        """
+        # Both algorithms use the same reward function now
+        return self._calculate_reward_qlearning()
 
     def _scale_and_get_metrics(self) -> None:
         self._scale()
@@ -816,7 +996,9 @@ class KubernetesEnv:
             "current_replicas": float(self.replica_state),  # Absolute replica count
         }
 
-    def step(self, action: int, q_table_size: int = 0) -> tuple[dict[str, float], float, bool, dict]:
+    def step(
+        self, action: int, q_table_size: int = 0
+    ) -> tuple[dict[str, float], float, bool, dict]:
         # Calculate action change before updating last_action
         self.action_change = action - self.last_action
         self.last_action = action

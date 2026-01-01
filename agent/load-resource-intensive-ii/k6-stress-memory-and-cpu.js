@@ -44,7 +44,7 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || "http://10.34.4.150:30080/api/qfuzzy";
+const BASE_URL = __ENV.BASE_URL || "http://10.34.4.150:30080/api/q";
 
 export function cpuTest() {
   const url = `${BASE_URL}/cpu?iterations=200`;
@@ -59,7 +59,7 @@ export function cpuTest() {
 }
 
 export function memoryTest() {
-  const url = `${BASE_URL}/memory?size=2000&heavy_agg=true`;
+  const url = `${BASE_URL}/memory?size=1500&heavy_agg=true`;
   const res = http.post(url);
 
   check(res, {
