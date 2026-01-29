@@ -403,12 +403,29 @@ class KubernetesEnv:
             wasteful_score = 1.0  # Severe waste: all metrics very low
         elif (cpu_very_low or mem_very_low) and resp_excellent and req_rate_very_low:
             wasteful_score = 0.9
-        elif cpu_low and mem_low and resp_good and req_rate_normalized < 50.0:
+        elif cpu_low and mem_low and resp_good and request_rate_normalized < 50.0:
             wasteful_score = 0.7
         elif (cpu_low or mem_low) and resp_excellent:
             wasteful_score = 0.5
         else:
             wasteful_score = 0.0
+
+        # ========================================================================================================
+        # WAIVE WASTEFUL PENALTY AT MIN_REPLICAS
+        # ========================================================================================================
+        # Problem: At minimum replicas with low load, system gets wasteful penalty but cannot scale down
+        # Solution: Waive wasteful penalty when at MIN_REPLICAS to avoid unfair negative rewards
+        # Rationale: Agent cannot improve this state (already at minimum), so don't penalize
+        # ========================================================================================================
+
+        if wasteful_score > 0 and self.replica_state <= self.min_replicas:
+            original_wasteful = wasteful_score
+            wasteful_score = 0.0
+            self.logger.debug(
+                f"Wasteful penalty waived: at MIN_REPLICAS "
+                f"(current={self.replica_state}, min={self.min_replicas}, "
+                f"original_wasteful={original_wasteful:.2f})"
+            )
 
         # Response time very high, CPU/MEM maxed out, or request rate saturating
         cpu_very_high = self.cpu_usage > self.max_cpu * 1.1
