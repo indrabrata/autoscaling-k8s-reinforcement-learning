@@ -40,3 +40,20 @@
    ```bash
    sudo docker exec member-influxdb2-1 influx query 'from(bucket:"autoscaling-reinforcement-learning") |> range(start:2025-12-27T00:00:00Z, stop: now()) |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "\_value")' --org "" --token "" --raw > metrics_export.csv
    ```
+
+5. Average Cumulative Reward by Algorithm
+
+   ```influxdb
+   from(bucket: "autoscaling-reinforcement-learning")
+   |> range(
+      start: 2026-01-03T03:35:00Z,
+      stop: now()
+   )
+   |> filter(fn: (r) => r["_measurement"] == "autoscaling_metrics")
+   |> filter(fn: (r) => r["_field"] == "cumulative_reward")
+   |> filter(fn: (r) => r["algorithm"] == "Q-LEARNING-FUZZY")
+   |> filter(fn: (r) => r["deployment"] == "resource-intensive-qfuzzy")
+   |> group(columns: ["algorithm", "deployment"])
+   |> mean()
+
+   ```

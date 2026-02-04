@@ -49,7 +49,9 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || "http://10.34.4.150:30080/api/q";
+const BASE_URL = "http://10.34.4.150:30080/api/q";
+
+console.log("BASE_URL:", BASE_URL);
 
 export function cpuTest() {
   const url = `${BASE_URL}/cpu?iterations=200`;

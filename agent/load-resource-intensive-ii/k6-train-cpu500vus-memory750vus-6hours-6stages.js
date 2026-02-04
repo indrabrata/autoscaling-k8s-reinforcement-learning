@@ -45,7 +45,9 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || "http://localhost:30080/api";
+const BASE_URL = "http://localhost:30080/api";
+
+console.log("BASE_URL: ", BASE_URL);
 
 // ---- TEST FUNCTIONS ----
 export function cpuTest() {

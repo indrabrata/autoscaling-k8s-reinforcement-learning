@@ -59,9 +59,6 @@ if __name__ == "__main__":
         metrics_endpoints_method=metrics_endpoints_method,
         metrics_interval=int(os.getenv("METRICS_INTERVAL", "15")),
         max_scaling_retries=int(os.getenv("MAX_SCALING_RETRIES", "1000")),
-        response_time_weight=float(os.getenv("RESPONSE_TIME_WEIGHT", "1.0")),
-        cpu_memory_weight=float(os.getenv("CPU_MEMORY_WEIGHT", "0.5")),
-        cost_weight=float(os.getenv("COST_WEIGHT", "0.3")),
         request_rate_per_pod_capacity=float(
             os.getenv("REQUEST_RATE_PER_POD_CAPACITY", "80.0")
         ),

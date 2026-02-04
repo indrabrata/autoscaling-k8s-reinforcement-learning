@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from database import InfluxDB
 from dotenv import load_dotenv
+
+from database import InfluxDB
 from environment import KubernetesEnv
 from rl import QLearning, QLearningFuzzy
 from trainer import Trainer
@@ -44,6 +45,7 @@ def find_latest_checkpoint(algorithm: str) -> Optional[str]:
     # Sort by modification time, most recent first
     latest_checkpoint = max(checkpoint_files, key=lambda p: p.stat().st_mtime)
     return str(latest_checkpoint)
+
 
 if __name__ == "__main__":
     start_time = int(time.time())
@@ -93,10 +95,9 @@ if __name__ == "__main__":
         metrics_interval=int(os.getenv("METRICS_INTERVAL", "15")),
         metrics_quantile=float(os.getenv("METRICS_QUANTILE", "0.90")),
         max_scaling_retries=int(os.getenv("MAX_SCALING_RETRIES", "1000")),
-        response_time_weight=float(os.getenv("RESPONSE_TIME_WEIGHT", "1.0")),
-        cpu_memory_weight=float(os.getenv("CPU_MEMORY_WEIGHT", "0.5")),
-        cost_weight=float(os.getenv("COST_WEIGHT", "0.3")),
-        request_rate_per_pod_capacity=float(os.getenv("REQUEST_RATE_PER_POD_CAPACITY", "80.0")),
+        request_rate_per_pod_capacity=float(
+            os.getenv("REQUEST_RATE_PER_POD_CAPACITY", "80.0")
+        ),
         algorithm=choose_algorithm,
     )
 
@@ -150,7 +151,9 @@ if __name__ == "__main__":
         final_resume_path = resume_path
         logger.info(f"Resuming from specified path: {resume_path}")
     elif resume and not resume_path:
-        logger.warning("RESUME is True but RESUME_PATH is empty. Starting from scratch.")
+        logger.warning(
+            "RESUME is True but RESUME_PATH is empty. Starting from scratch."
+        )
 
     trainer = Trainer(
         agent=algorithm,
@@ -178,8 +181,10 @@ if __name__ == "__main__":
         logger.info("\nNo Q-table to display")
 
     model_type = (
-        "qlearningfuzzy" if isinstance(trainer.agent, QLearningFuzzy)
-        else "qlearning" if isinstance(trainer.agent, QLearning)
+        "qlearningfuzzy"
+        if isinstance(trainer.agent, QLearningFuzzy)
+        else "qlearning"
+        if isinstance(trainer.agent, QLearning)
         else "unknown"
     )
     model_dir = Path(f"model/{model_type}/{start_time}_{note}/final")

@@ -29,7 +29,7 @@ def wait_for_pods_ready(
               namespace="{namespace}", owner_kind="Deployment", owner_name="{deployment_name}"
             }}
         )
-    """ 
+    """
     q_desired = f"""
     scalar(
       sum(
@@ -48,7 +48,15 @@ def wait_for_pods_ready(
 
     while time.time() - start_time < timeout:
         try:
-            desired_replicas_prom = int(prometheus.custom_query(query=q_desired)[1])
+            desired_val = prometheus.custom_query(query=q_desired)[1]
+            if desired_val == "NaN":
+                logger.debug(
+                    "wait_for_pods_ready: desired_replicas metric returned NaN, retrying..."
+                )
+                time.sleep(1)
+                continue
+
+            desired_replicas_prom = int(desired_val)
             if desired_replicas_prom != desired_replicas:
                 logger.debug(
                     f"wait_for_pods_ready: desired_replicas mismatch, "
@@ -62,7 +70,15 @@ def wait_for_pods_ready(
                 f"matched: {desired_replicas_prom}"
             )
 
-            ready_replicas = int(prometheus.custom_query(query=q_ready)[1])
+            ready_val = prometheus.custom_query(query=q_ready)[1]
+            if ready_val == "NaN":
+                logger.debug(
+                    "wait_for_pods_ready: ready_replicas metric returned NaN, retrying..."
+                )
+                time.sleep(1)
+                continue
+
+            ready_replicas = int(ready_val)
             logger.debug(f"wait_for_pods_ready: ready_replicas={ready_replicas}")
             if ready_replicas == desired_replicas > 0:
                 logger.debug("wait_for_pods_ready: pods are ready")

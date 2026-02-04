@@ -22,13 +22,13 @@ export const options = {
       startVUs: 0,
       stages: [
         // Stage 1: Warmup & Low Load (30 min) - Learn wasteful state
-        { duration: "5m", target: 10 },   // Gradual start
-        { duration: "10m", target: 20 },  // Low utilization
-        { duration: "15m", target: 15 },  // Slight decrease
+        { duration: "5m", target: 10 }, // Gradual start
+        { duration: "10m", target: 20 }, // Low utilization
+        { duration: "15m", target: 15 }, // Slight decrease
 
         // Stage 2: Ramp to Medium Load (30 min) - Learn optimal state
-        { duration: "10m", target: 50 },  // Moderate increase
-        { duration: "10m", target: 80 },  // Optimal range
+        { duration: "10m", target: 50 }, // Moderate increase
+        { duration: "10m", target: 80 }, // Optimal range
         { duration: "10m", target: 100 }, // High-optimal
 
         // Stage 3: High Load Stress (45 min) - Learn critical state
@@ -37,13 +37,13 @@ export const options = {
         { duration: "15m", target: 180 }, // Slight relief
 
         // Stage 4: Rapid Fluctuations (45 min) - Learn adaptability
-        { duration: "5m", target: 50 },   // Sharp drop
-        { duration: "5m", target: 150 },  // Sharp spike
-        { duration: "5m", target: 30 },   // Drop again
-        { duration: "5m", target: 120 },  // Spike again
-        { duration: "5m", target: 80 },   // Stabilize
-        { duration: "10m", target: 90 },  // Maintain
-        { duration: "10m", target: 70 },  // Slight decrease
+        { duration: "5m", target: 50 }, // Sharp drop
+        { duration: "5m", target: 150 }, // Sharp spike
+        { duration: "5m", target: 30 }, // Drop again
+        { duration: "5m", target: 120 }, // Spike again
+        { duration: "5m", target: 80 }, // Stabilize
+        { duration: "10m", target: 90 }, // Maintain
+        { duration: "10m", target: 70 }, // Slight decrease
 
         // Stage 5: Sustained High Load (60 min) - Learn stability under pressure
         { duration: "20m", target: 140 }, // High sustained
@@ -52,10 +52,10 @@ export const options = {
 
         // Stage 6: Gradual Scale Down (45 min) - Learn efficient scale-down
         { duration: "10m", target: 100 }, // Start reducing
-        { duration: "10m", target: 60 },  // Continue reducing
-        { duration: "10m", target: 40 },  // Lower
-        { duration: "10m", target: 20 },  // Very low
-        { duration: "5m", target: 0 },    // Ramp down
+        { duration: "10m", target: 60 }, // Continue reducing
+        { duration: "10m", target: 40 }, // Lower
+        { duration: "10m", target: 20 }, // Very low
+        { duration: "5m", target: 0 }, // Ramp down
       ],
       gracefulRampDown: "30s",
     },
@@ -107,11 +107,13 @@ export const options = {
   thresholds: {
     // Monitor but don't fail - we want to see how the system behaves
     http_req_duration: ["p(95)<5000"], // 95% of requests should complete within 5s
-    http_req_failed: ["rate<0.1"],     // Less than 10% failure rate
+    http_req_failed: ["rate<0.1"], // Less than 10% failure rate
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || "http://10.34.4.150:30080/api/qfuzzy";
+const BASE_URL = "http://10.34.4.150:30080/api/qfuzzy";
+
+console.log("BASE_URL: ", BASE_URL);
 
 // CPU-intensive endpoint
 export function cpuTest() {

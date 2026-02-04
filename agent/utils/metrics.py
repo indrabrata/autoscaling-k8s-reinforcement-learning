@@ -212,7 +212,7 @@ def _get_response_time(
     prometheus: PrometheusConnect,
     deployment_name: str,
     namespace: str = "default",
-    endpoints_method: list[tuple[str, str]] = (("/", "GET"), ("/docs", "GET")),
+    endpoints_method: list[tuple[str, str]] = [("/", "GET"), ("/docs", "GET")],
     interval: int = 15,
     quantile: float = 0.90,
     logger: logging.Logger = logging.getLogger(__name__),
@@ -309,6 +309,7 @@ def _fetch_metric_with_retry(
 ) -> list:
     """Fetch a single metric with retry until timeout or expected count is reached."""
     fetch_start = time.time()
+    results = []
 
     while time.time() - fetch_start < timeout:
         results = prometheus.custom_query(query)
@@ -380,7 +381,7 @@ def get_metrics(
     prometheus: PrometheusConnect,
     interval: int = 30,
     quantile: float = 0.90,
-    endpoints_method: list[tuple[str, str]] = (("/", "GET"), ("/docs", "GET")),
+    endpoints_method: list[tuple[str, str]] = [("/", "GET"), ("/docs", "GET")],
     increase: bool = False,
     logger: logging.Logger = logging.getLogger(__name__),
 ) -> tuple[float, float, float, float, int]:
@@ -419,15 +420,13 @@ def get_metrics(
         logger.debug(f"Memory Limits Query: {memory_limits_query}")
 
         try:
-            fetch_timeout = timeout / 2
-
             (
                 cpu_usage_results,
                 memory_usage_results,
                 cpu_limits_results,
                 memory_limits_results,
             ) = _scrape_metrics(
-                fetch_timeout=fetch_timeout,
+                fetch_timeout=timeout,
                 prometheus=prometheus,
                 cpu_query=cpu_query,
                 memory_query=memory_query,

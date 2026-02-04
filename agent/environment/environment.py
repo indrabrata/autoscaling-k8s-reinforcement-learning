@@ -1,7 +1,8 @@
+import logging
 import math
 import time
 from logging import Logger
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
@@ -31,20 +32,17 @@ class KubernetesEnv:
         logger: Optional[Logger] = None,
         influxdb: Optional[InfluxDB] = None,
         prometheus_url: str = "http://localhost:1234/prometheus",
-        metrics_endpoints_method: list[tuple[str, str]] = (
+        metrics_endpoints_method: list[tuple[str, str]] = [
             ("/", "GET"),
             ("/docs", "GET"),
-        ),
+        ],
         metrics_interval: int = 15,
         metrics_quantile: float = 0.90,
         max_scaling_retries: int = 1000,
-        response_time_weight: float = 1.0,
-        cpu_memory_weight: float = 0.5,
-        cost_weight: float = 0.3,
         request_rate_per_pod_capacity: float = 80.0,
         algorithm: str = "Q",
     ) -> None:
-        self.logger = logger
+        self.logger = logger or logging.getLogger(__name__)
         config.load_kube_config()
         self.cluster = client.AppsV1Api()
         self.api = client.CustomObjectsApi()
@@ -76,9 +74,9 @@ class KubernetesEnv:
         self.max_scaling_retries = max_scaling_retries
 
         self.action_space = list(range(100))
-        self.response_time_weight = response_time_weight
-        self.cpu_memory_weight = cpu_memory_weight
-        self.cost_weight = cost_weight
+        self.response_time_weight = 1.0
+        self.cpu_memory_weight = 0.5
+        self.cost_weight = 0.3
 
         self.algorithm = algorithm
 
@@ -145,12 +143,6 @@ class KubernetesEnv:
         self.logger.info(
             f"  Response Time Quantile: P{int(self.metrics_quantile * 100)}"
         )
-
-        self.logger.info("")
-        self.logger.info("⚖️  REWARD WEIGHTS:")
-        self.logger.info(f"  Response Time Weight:   {self.response_time_weight}")
-        self.logger.info(f"  CPU/Memory Weight:      {self.cpu_memory_weight}")
-        self.logger.info(f"  Cost Weight:            {self.cost_weight}")
 
         self.logger.info("")
         self.logger.info("⏱️  TIMING PARAMETERS:")
@@ -299,7 +291,7 @@ class KubernetesEnv:
             f"Proceeding with current replica state to avoid blocking training."
         )
 
-    def _calculate_reward_qlearning(self) -> Tuple[float, Dict[str, float]]:
+    def _calculate_reward_qlearning(self) -> Tuple[float, Dict[str, Union[float, str]]]:
         """
         UNIFIED REWARD FUNCTION - Used by BOTH Q-Learning and Q-Fuzzy
 
@@ -471,22 +463,41 @@ class KubernetesEnv:
         # ========================================================================================================
 
         if positive_contribution == 0.0 and negative_contribution == 0.0:
-            # State doesn't fit any category - check if it's at least "acceptable"
-            cpu_acceptable = 20 <= self.cpu_usage <= 80
-            mem_acceptable = 20 <= self.memory_usage <= 80
-            resp_acceptable = response_time_percentage <= 100.0
-            req_acceptable = request_rate_normalized <= 85.0
+            at_min_replicas = self.replica_state <= self.min_replicas
 
-            if cpu_acceptable and mem_acceptable and resp_acceptable and req_acceptable:
-                # Give small baseline reward for acceptable (but not optimal) state
-                neutral_baseline = 0.2
+            if at_min_replicas and resp_good:
+                # At min replicas with low load and good response time — this is correct behavior
+                # The agent cannot scale down further, so reward it for being at the floor
+                neutral_baseline = 0.3
                 positive_contribution = neutral_baseline
 
                 self.logger.debug(
-                    f"Neutral state detected: CPU={self.cpu_usage:.1f}%, "
+                    f"Min replicas baseline: CPU={self.cpu_usage:.1f}%, "
                     f"MEM={self.memory_usage:.1f}%, RT={response_time_percentage:.1f}%, "
-                    f"RPS={request_rate_normalized:.1f}% → baseline reward={neutral_baseline}"
+                    f"Replicas={self.replica_state}/{self.min_replicas} → baseline reward={neutral_baseline}"
                 )
+            else:
+                # State doesn't fit any category - check if it's at least "acceptable"
+                cpu_acceptable = 20 <= self.cpu_usage <= 80
+                mem_acceptable = 20 <= self.memory_usage <= 80
+                resp_acceptable = response_time_percentage <= 100.0
+                req_acceptable = request_rate_normalized <= 85.0
+
+                if (
+                    cpu_acceptable
+                    and mem_acceptable
+                    and resp_acceptable
+                    and req_acceptable
+                ):
+                    # Give small baseline reward for acceptable (but not optimal) state
+                    neutral_baseline = 0.2
+                    positive_contribution = neutral_baseline
+
+                    self.logger.debug(
+                        f"Neutral state detected: CPU={self.cpu_usage:.1f}%, "
+                        f"MEM={self.memory_usage:.1f}%, RT={response_time_percentage:.1f}%, "
+                        f"RPS={request_rate_normalized:.1f}% → baseline reward={neutral_baseline}"
+                    )
 
         # Base reward formula
         if negative_contribution > 0:
@@ -644,7 +655,7 @@ class KubernetesEnv:
 
     def _calculate_reward_qlearningfuzzy_OLD_DEPRECATED(
         self,
-    ) -> Tuple[float, Dict[str, float]]:
+    ) -> Tuple[float, Dict[str, Union[float, str]]]:
         """
         OLD DEPRECATED FUNCTION - DO NOT USE
 
@@ -865,7 +876,7 @@ class KubernetesEnv:
             "fuzzy_negative_contribution": negative_contribution,
         }
 
-    def _calculate_reward(self) -> Tuple[float, Dict[str, float]]:
+    def _calculate_reward(self) -> Tuple[float, Dict[str, Union[float, str]]]:
         """
         Unified reward calculation for both Q-Learning and Q-Fuzzy.
 
@@ -978,7 +989,7 @@ class KubernetesEnv:
         else:
             return "stable"
 
-    def _get_observation(self) -> dict[str, float]:
+    def _get_observation(self) -> dict[str, Union[float, str]]:
         """
         This is the state representation that RL agents use for decision making.
         """
@@ -1015,7 +1026,7 @@ class KubernetesEnv:
 
     def step(
         self, action: int, q_table_size: int = 0
-    ) -> tuple[dict[str, float], float, bool, dict]:
+    ) -> tuple[dict[str, Union[float, str]], float, bool, dict]:
         # Calculate action change before updating last_action
         self.action_change = action - self.last_action
         self.last_action = action
@@ -1106,7 +1117,7 @@ class KubernetesEnv:
             )
         return observation, reward, terminated, info
 
-    def reset(self) -> dict[str, float]:
+    def reset(self) -> dict[str, Union[float, str]]:
         """
         CRITICAL: Reset environment to initial state for new episode.
         Clears action history and resets all state variables.
