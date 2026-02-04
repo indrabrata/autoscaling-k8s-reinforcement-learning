@@ -34,7 +34,7 @@ class QLearningFuzzy:
         self.created_at = created_at
         self.episodes_trained = 0
         self.n_actions = n_actions
-        self.q_table: Dict[Tuple[str, str, str], np.ndarray] = {}
+        self.q_table = {}
         self.fuzzy = Fuzzy(logger=logger)
         self.logger = logger or Logger(__name__)
 
@@ -65,19 +65,21 @@ class QLearningFuzzy:
 
         fuzzy_state = self.fuzzy.fuzzify(observation)
 
-        cpu_label = max(fuzzy_state["cpu_usage"], key=fuzzy_state["cpu_usage"].get)
+        cpu_label = max(
+            fuzzy_state["cpu_usage"], key=lambda k: fuzzy_state["cpu_usage"][k]
+        )
         mem_label = max(
-            fuzzy_state["memory_usage"], key=fuzzy_state["memory_usage"].get
+            fuzzy_state["memory_usage"], key=lambda k: fuzzy_state["memory_usage"][k]
         )
         resp_label = max(
-            fuzzy_state["response_time"], key=fuzzy_state["response_time"].get
+            fuzzy_state["response_time"], key=lambda k: fuzzy_state["response_time"][k]
         )
         request_rate_label = max(
             fuzzy_state["request_rate_normalized"],
-            key=fuzzy_state["request_rate_normalized"].get,
+            key=lambda k: fuzzy_state["request_rate_normalized"][k],
         )
         last_action_label = max(
-            fuzzy_state["last_action"], key=fuzzy_state["last_action"].get
+            fuzzy_state["last_action"], key=lambda k: fuzzy_state["last_action"][k]
         )
 
         request_rate_trend_category = observation["request_rate_trend_category"]
@@ -101,8 +103,14 @@ class QLearningFuzzy:
 
         if np.random.rand() < self.epsilon:
             action = np.random.randint(0, self.n_actions)
+            self.logger.info(
+                f"[Epsilon] value={self.epsilon:.6f} | action=EXPLORATION ({action})"
+            )
         else:
-            action = np.argmax(self.q_table[state_key])
+            action = int(np.argmax(self.q_table[state_key]))
+            self.logger.info(
+                f"[Epsilon] value={self.epsilon:.6f} | action=EXPLOITATION ({action})"
+            )
 
         return action
 
@@ -184,7 +192,7 @@ class QLearningFuzzy:
             self.logger.error(f"Failed to load model: {e}")
             raise
 
-    def show_model_summary(self, max_states: int = None):
+    def show_model_summary(self, max_states: int = 100):
         print("\n" + "=" * 120)
         print(f"Q-Fuzzy Hybrid Agent Summary ({self.agent_type})".center(120))
         print("=" * 120)

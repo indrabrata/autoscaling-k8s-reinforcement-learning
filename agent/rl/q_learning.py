@@ -9,6 +9,7 @@ import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+
 class QLearning:
     def __init__(
         self,
@@ -38,7 +39,9 @@ class QLearning:
     def add_episode_count(self, count: int = 1):
         self.episodes_trained += count
 
-    def get_state_key(self, observation: dict) -> tuple[float, float, float, float, str, float, str]:
+    def get_state_key(
+        self, observation: dict
+    ) -> tuple[float, float, float, float, str, float, str]:
         """
         Extract state key from observation using real continuous values.
 
@@ -88,8 +91,14 @@ class QLearning:
 
         if np.random.rand() < self.epsilon:
             action = np.random.randint(0, self.n_actions)
+            self.logger.info(
+                f"[Epsilon] value={self.epsilon:.6f} | action=EXPLORATION ({action})"
+            )
         else:
-            action = np.argmax(self.q_table[state_key])
+            action = int(np.argmax(self.q_table[state_key]))
+            self.logger.info(
+                f"[Epsilon] value={self.epsilon:.6f} | action=EXPLOITATION ({action})"
+            )
 
         return action
 
@@ -104,9 +113,7 @@ class QLearning:
         if next_state_key not in self.q_table:
             self.q_table[next_state_key] = np.zeros(self.n_actions)
 
-        best_next_action = np.max(
-            self.q_table[next_state_key]
-        )
+        best_next_action = np.max(self.q_table[next_state_key])
         self.q_table[state_key][action] += self.learning_rate * (
             reward
             + self.discount_factor * best_next_action
@@ -162,7 +169,7 @@ class QLearning:
             self.logger.error(f"Failed to load model from {filepath}: {e}")
             raise
 
-    def show_model_summary(self, max_states: int = None):
+    def show_model_summary(self, max_states: int = 100):
         print("\n" + "=" * 120)
         print(f"Q-Learning Agent Summary ({self.agent_type})".center(120))
         print("=" * 120)
@@ -183,11 +190,15 @@ class QLearning:
             return
 
         total_states = len(self.q_table)
-        states_to_show = total_states if max_states is None else min(max_states, total_states)
+        states_to_show = (
+            total_states if max_states is None else min(max_states, total_states)
+        )
 
         print(f"Showing {states_to_show}/{total_states} Q-table states:\n")
         print("-" * 150)
-        print(f"{'Idx':<5} {'State: (CPU, MEM, RESP, ReqRate, ReqTrend, LastAct, ActTrend)':<85} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}")
+        print(
+            f"{'Idx':<5} {'State: (CPU, MEM, RESP, ReqRate, ReqTrend, LastAct, ActTrend)':<85} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}"
+        )
         print("-" * 150)
 
         for i, (state_key, actions) in enumerate(self.q_table.items()):
@@ -205,7 +216,9 @@ class QLearning:
             best_value = float(np.max(actions))
             avg_value = float(np.mean(actions))
 
-            print(f"{i+1:<5} {state_str:<45} {best_action:<8} {best_value:<10.4f} {avg_value:<10.4f}")
+            print(
+                f"{i + 1:<5} {state_str:<45} {best_action:<8} {best_value:<10.4f} {avg_value:<10.4f}"
+            )
 
             print(" " * 7 + "Q-Values (Action → Value):")
             actions_per_row = 10
@@ -225,4 +238,3 @@ class QLearning:
 
         print("End of full Q-table summary.")
         print("=" * 120 + "\n")
-                                

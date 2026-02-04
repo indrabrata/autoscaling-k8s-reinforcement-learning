@@ -82,3 +82,6 @@ kubeconfig
 *.tmp
 *.temp
 .cache/
+
+reward-function-analysis.md
+training-prediction-analysis.md

@@ -1,5 +1,5 @@
 from logging import Logger
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 
 class Fuzzy:
@@ -300,7 +300,7 @@ class Fuzzy:
         )
         return influence
 
-    def decide(self, obs: Dict[str, float]) -> Dict[str, float]:
+    def decide(self, obs: Dict[str, float]) -> Dict[str, Union[float, str]]:
         fz = self.fuzzify(obs)
         acts = self.apply_rules(fz)
         infl = self.influence(acts)
