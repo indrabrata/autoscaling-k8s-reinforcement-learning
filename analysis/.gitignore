@@ -1,4 +1,6 @@
 model/
 data/
+data-testing/
+data-training/
 .venv
 logs/
