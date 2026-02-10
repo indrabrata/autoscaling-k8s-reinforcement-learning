@@ -1,7 +1,6 @@
 import logging
 import os
 import sys
-import traceback
 import types
 from datetime import datetime
 from logging import Logger
@@ -13,7 +12,10 @@ import numpy as np
 
 if os.name == "nt":
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        import io
+
+        if isinstance(sys.stdout, io.TextIOWrapper):
+            sys.stdout.reconfigure(encoding="utf-8")
         _UNICODE_ENABLED = True
     except Exception:
         _UNICODE_ENABLED = False

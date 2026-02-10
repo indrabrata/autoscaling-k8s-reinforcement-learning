@@ -32,8 +32,8 @@ class QLearningFuzzy:
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         self.created_at = created_at
-        self.episodes_trained = 0
         self.n_actions = n_actions
+        self.episodes_trained = 0
         self.q_table = {}
         self.fuzzy = Fuzzy(logger=logger)
         self.logger = logger or Logger(__name__)

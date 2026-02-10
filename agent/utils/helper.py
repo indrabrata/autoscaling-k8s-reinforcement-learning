@@ -41,15 +41,14 @@ def normalize_endpoints(
     default: Iterable[Tuple[str, str]] = (("/", "GET"), ("/docs", "GET")),
 ) -> List[Tuple[str, str]]:
     """
-        Accepted inputs:
+    Accepted inputs:
 
-        JSON string: '[["/a","GET"],["/b","POST"]]'
-        Python literal string: '[("/a","GET"), ("/b","POST")]'
-        List[tuple]: [("/a","GET"), ...]
-        List[str]: ["/a", "/b"] -> default method "GET"
-        Single string: "/a" -> default method "GET"
-        
-        Return: List[Tuple[str, str]]
+    JSON string: '[["/a","GET"],["/b","POST"]]'
+    Python literal string: '[("/a","GET"), ("/b","POST")]'
+    List[tuple]: [("/a","GET"), ...]
+    List[str]: ["/a", "/b"] -> default method "GET"
+    Single string: "/a" -> default method "GET"
+    Return: List[Tuple[str, str]]
     """
     if endpoints is None:
         endpoints = default
@@ -72,7 +71,7 @@ def normalize_endpoints(
                 parsed = loader(s)
                 return normalize_endpoints(parsed, default)
             except Exception:
-                print("Failed to parse endpoints JSON:", s) 
+                print("Failed to parse endpoints JSON:", s)
         return [(s, "GET")]
 
     return normalize_endpoints(default, default)

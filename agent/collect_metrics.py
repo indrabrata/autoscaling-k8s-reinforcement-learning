@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import csv
 import logging
 import os
@@ -59,6 +61,8 @@ def get_current_replicas(
         deployment = apps_v1.read_namespaced_deployment(
             name=deployment_name, namespace=namespace
         )
+        if deployment.status is None:
+            return 0
         return deployment.status.ready_replicas or 0
     except Exception as e:
         logger.error(f"Failed to get replicas: {e}")
@@ -168,8 +172,8 @@ def run_collector(
     collect_interval: int = 30,
     metrics_interval: int = 15,
     quantile: float = 0.90,
-    endpoints_method: list = None,
-    logger: logging.Logger = None,
+    endpoints_method: list | None = None,
+    logger: logging.Logger | None = None,
 ) -> str:
     """
     Run metrics collection loop. Collects every `collect_interval` seconds

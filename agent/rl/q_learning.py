@@ -19,9 +19,9 @@ class QLearning:
         epsilon_decay: float = 0.99,
         epsilon_min: float = 0.01,
         created_at: int = 0,
+        n_actions: int = 100,
         logger: Optional[Logger] = None,
     ):
-        self.n_actions = 100
         self.agent_type = "Q-LEARNING"
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
@@ -29,6 +29,7 @@ class QLearning:
         self.epsilon_min = epsilon_min
         self.epsilon_decay = epsilon_decay
         self.created_at = created_at
+        self.n_actions = n_actions
         self.episodes_trained = 0
         self.q_table = {}
         self.logger = logger or Logger(__name__)
