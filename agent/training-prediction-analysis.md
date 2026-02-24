@@ -1,39 +1,39 @@
-# Analisis Detail Alur Training dan Prediction: Autoscaling Kubernetes dengan Reinforcement Learning
+# Training and Prediction Flow Analysis: Kubernetes Autoscaling with RL
 
-## Daftar Isi
+## Table of Contents
 
-- [BAGIAN A: ALUR TRAINING](#bagian-a-alur-training)
-  - [1. Inisialisasi Sistem](#1-inisialisasi-sistem)
-  - [2. Komponen Utama Training](#2-komponen-utama-training)
+- [PART A: TRAINING FLOW](#part-a-training-flow)
+  - [1. System Initialization](#1-system-initialization)
+  - [2. Key Components](#2-key-components)
   - [3. Training Loop — Trainer Class](#3-training-loop--trainer-class)
   - [4. Environment: reset()](#4-environment-reset)
-  - [5. Agent: get_action()](#5-agent-get_action)
+  - [5. Agent: get\_action()](#5-agent-get_action)
   - [6. Environment: step()](#6-environment-step)
-  - [7. Interaksi dengan Kubernetes Cluster](#7-interaksi-dengan-kubernetes-cluster)
-  - [8. Pengumpulan Metrik dari Prometheus](#8-pengumpulan-metrik-dari-prometheus)
-  - [9. Observasi (State Representation)](#9-observasi-state-representation)
-  - [10. Agent: update_q_table()](#10-agent-update_q_table)
-  - [11. Perbedaan State Key: Q-Learning vs Q-Fuzzy](#11-perbedaan-state-key-q-learning-vs-q-fuzzy)
-  - [12. Fuzzy Logic — Fuzzifikasi State](#12-fuzzy-logic--fuzzifikasi-state)
-  - [13. Checkpoint dan Model Saving](#13-checkpoint-dan-model-saving)
-  - [14. Hyperparameter Training](#14-hyperparameter-training)
-  - [15. Diagram Alur Training End-to-End](#15-diagram-alur-training-end-to-end)
-- [BAGIAN B: ALUR PREDICTION](#bagian-b-alur-prediction)
-  - [16. Inisialisasi Prediction](#16-inisialisasi-prediction)
+  - [7. Kubernetes Cluster Interaction](#7-kubernetes-cluster-interaction)
+  - [8. Prometheus Metrics Collection](#8-prometheus-metrics-collection)
+  - [9. Observation (State Representation)](#9-observation-state-representation)
+  - [10. Agent: update\_q\_table()](#10-agent-update_q_table)
+  - [11. State Key Differences: Q-Learning vs Q-Fuzzy](#11-state-key-differences-q-learning-vs-q-fuzzy)
+  - [12. Fuzzy Logic — State Fuzzification](#12-fuzzy-logic--state-fuzzification)
+  - [13. Checkpoint and Model Saving](#13-checkpoint-and-model-saving)
+  - [14. Training Hyperparameters](#14-training-hyperparameters)
+  - [15. End-to-End Training Diagram](#15-end-to-end-training-diagram)
+- [PART B: PREDICTION FLOW](#part-b-prediction-flow)
+  - [16. Prediction Initialization](#16-prediction-initialization)
   - [17. Prediction Loop](#17-prediction-loop)
-  - [18. Perbedaan Training vs Prediction](#18-perbedaan-training-vs-prediction)
-  - [19. Diagram Alur Prediction End-to-End](#19-diagram-alur-prediction-end-to-end)
-- [BAGIAN C: REKOMENDASI JAWABAN SIDANG](#bagian-c-rekomendasi-jawaban-sidang)
+  - [18. Training vs Prediction Differences](#18-training-vs-prediction-differences)
+  - [19. End-to-End Prediction Diagram](#19-end-to-end-prediction-diagram)
+- [PART C: THESIS DEFENSE Q&A](#part-c-thesis-defense-qa)
 
 ---
 
-# BAGIAN A: ALUR TRAINING
+## PART A: TRAINING FLOW
 
-## 1. Inisialisasi Sistem
+## 1. System Initialization
 
-Training dimulai dari `train.py` (line 50–169). Proses inisialisasi terdiri dari 5 tahap:
+Training starts from `train.py`. The initialization has 5 stages:
 
-### 1.1 Setup Logger (line 52–56)
+### 1.1 Logger Setup
 
 ```python
 logger = setup_logger(
@@ -43,9 +43,9 @@ logger = setup_logger(
 )
 ```
 
-Logger mencatat semua aktivitas ke console dan file rotasi (max 10 MB per file, 5 backup). File log disimpan di `logs/{YYYY-MM-DD-HH-MM}/`.
+The logger writes to both console and a rotating file (max 10 MB per file, 5 backups). Log files are stored in `logs/{YYYY-MM-DD-HH-MM}/`.
 
-### 1.2 Koneksi InfluxDB (line 58–64)
+### 1.2 InfluxDB Connection
 
 ```python
 influxdb = InfluxDB(
@@ -56,45 +56,41 @@ influxdb = InfluxDB(
 )
 ```
 
-InfluxDB digunakan untuk **menyimpan metrik training** setiap iterasi — reward, CPU, memory, response time, request rate, jumlah replica, ukuran Q-table, dan lainnya. Data ini digunakan untuk analisis post-training.
+InfluxDB stores training metrics for every iteration — reward, CPU, memory, response time, replica count, Q-table size, etc. This data is used for post-training analysis.
 
-### 1.3 Inisialisasi Environment (line 77–102)
+### 1.3 Environment Initialization
 
 ```python
 env = KubernetesEnv(
-    min_replicas=1,       # Minimum pod yang diizinkan
-    max_replicas=12,      # Maksimum pod yang diizinkan
-    iteration=10,         # Jumlah step per episode
-    min_cpu=10,           # Batas bawah CPU usage (%) — di bawah ini = wasteful
-    max_cpu=90,           # Batas atas CPU usage (%) — di atas ini = critical
-    min_memory=10,        # Batas bawah memory usage (%)
-    max_memory=90,        # Batas atas memory usage (%)
-    max_response_time=100.0,  # Target SLA response time (ms)
-    timeout=120,          # Timeout menunggu pod ready (detik)
-    wait_time=60,         # Waktu tunggu setelah scaling sebelum ambil metrik (detik)
-    request_rate_per_pod_capacity=80.0,  # Kapasitas RPS per pod
-    algorithm="Q-LEARNING",  # Pilihan: "Q-LEARNING" atau "Q-LEARNING-FUZZY"
+    min_replicas=1,
+    max_replicas=12,
+    iteration=10,
+    max_response_time=100.0,
+    timeout=120,
+    wait_time=60,
+    algorithm="Q-LEARNING",  # or "Q-LEARNING-FUZZY"
 )
 ```
 
-Environment terhubung langsung ke:
-- **Kubernetes API** — untuk scaling deployment (menambah/mengurangi pod)
-- **Prometheus** — untuk mengumpulkan metrik real-time (CPU, memory, response time, request rate)
-- **InfluxDB** — untuk logging metrik training
+The environment connects directly to:
 
-### 1.4 Inisialisasi Agent (line 104–127)
+- **Kubernetes API** — to scale deployments (add/remove pods)
+- **Prometheus** — to collect real-time metrics (CPU, memory, response time)
+- **InfluxDB** — to log training metrics
+
+### 1.4 Agent Initialization
 
 ```python
 # Q-Learning
 algorithm = QLearning(
-    learning_rate=0.1,      # Alpha (α) — seberapa cepat belajar
-    discount_factor=0.95,   # Gamma (γ) — seberapa penting future reward
-    epsilon_start=0.1,      # Probabilitas awal eksplorasi
-    epsilon_decay=0.99,     # Laju penurunan epsilon per step
-    epsilon_min=0.01,       # Batas bawah epsilon
+    learning_rate=0.1,
+    discount_factor=0.95,
+    epsilon_start=0.1,
+    epsilon_decay=0.99,
+    epsilon_min=0.01,
 )
 
-# ATAU Q-Learning Fuzzy
+# OR Q-Learning Fuzzy
 algorithm = QLearningFuzzy(
     learning_rate=0.1,
     discount_factor=0.95,
@@ -104,309 +100,273 @@ algorithm = QLearningFuzzy(
 )
 ```
 
-Kedua agent memiliki:
-- **Q-table**: dictionary `{state_key: numpy.array(100)}` — menyimpan Q-value untuk 100 aksi
-- **100 aksi** (action 0–99): masing-masing merepresentasikan persentase dari rentang replica
+Both agents have:
 
-### 1.5 Inisialisasi Trainer (line 158–166)
+- **Q-table**: dictionary `{state_key: numpy.array(n_actions)}` — stores Q-values for each action
+- **n\_actions = max\_replicas**: action space maps directly to replica count (1 to max\_replicas)
+- Q-table is 0-indexed: index `i` stores the Q-value for replica count `i+1`
+- `get_action()` returns 1-based replica count
+
+### 1.5 Trainer Initialization
 
 ```python
 trainer = Trainer(
     agent=algorithm,
     env=env,
-    resume=True/False,           # Lanjutkan dari checkpoint
+    resume=True,
     resume_path="path/to/model.pkl",
-    reset_epsilon=True,          # Reset epsilon saat resume
-    change_epsilon_decay=0.90,   # Ubah decay saat resume
+    reset_epsilon=True,
+    change_epsilon_decay=0.90,
 )
 ```
 
-Trainer mendukung **resume training** — melanjutkan dari model checkpoint sebelumnya. Saat resume:
-- Q-table dimuat dari file pickle
-- Epsilon bisa di-reset (mulai eksplorasi ulang) atau dilanjutkan
-- Epsilon decay bisa diubah (misalnya lebih agresif)
+The Trainer supports **resume training** — continuing from a previous checkpoint. When resuming:
+
+- Q-table is loaded from the pickle file
+- Epsilon can be reset (restart exploration) or continued
+- Epsilon decay can be changed (e.g., more aggressive)
 
 ---
 
-## 2. Komponen Utama Training
+## 2. Key Components
 
-### Arsitektur Sistem
+### System Architecture
 
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                          train.py                            │
+│  (Entry point: initialize all components, start training)   │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                         Trainer                              │
+│  (Orchestrator: episode loop, checkpoint, signal handling)  │
+│                                                             │
+│  ┌───────────────┐     ┌───────────────────────────────┐   │
+│  │     Agent     │     │         Environment            │   │
+│  │               │     │                               │   │
+│  │  QLearning    │     │  KubernetesEnv                │   │
+│  │  OR           │◄───►│                               │   │
+│  │  QLearningF.  │     │  ┌──────────┐  ┌──────────┐  │   │
+│  │               │     │  │ K8s API  │  │Prometheus│  │   │
+│  │  ┌──────────┐ │     │  └──────────┘  └──────────┘  │   │
+│  │  │ Q-Table  │ │     │                               │   │
+│  │  └──────────┘ │     │  ┌───────────────────────┐   │   │
+│  │               │     │  │       InfluxDB         │   │   │
+│  │  ┌──────────┐ │     │  └───────────────────────┘   │   │
+│  │  │  Fuzzy   │ │     │                               │   │
+│  │  │(Q-Fuzzy) │ │     │                               │   │
+│  │  └──────────┘ │     │                               │   │
+│  └───────────────┘     └───────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          train.py                                   │
-│  (Entry point: inisialisasi semua komponen, jalankan training)      │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Trainer                                     │
-│  (Orkestrator: episode loop, checkpoint, signal handling)            │
-│                                                                     │
-│  ┌──────────────────┐     ┌──────────────────────────────────────┐  │
-│  │      Agent       │     │          Environment                 │  │
-│  │                  │     │                                      │  │
-│  │  QLearning       │     │  KubernetesEnv                       │  │
-│  │  ATAU            │◄───►│                                      │  │
-│  │  QLearningFuzzy  │     │  ┌──────────┐  ┌──────────────────┐  │  │
-│  │                  │     │  │Kubernetes│  │   Prometheus     │  │  │
-│  │  ┌────────────┐  │     │  │  API     │  │   (Metrics)      │  │  │
-│  │  │  Q-Table   │  │     │  └──────────┘  └──────────────────┘  │  │
-│  │  │  {s: Q[a]} │  │     │                                      │  │
-│  │  └────────────┘  │     │  ┌──────────────────────────────────┐ │  │
-│  │                  │     │  │         InfluxDB                 │ │  │
-│  │  ┌────────────┐  │     │  │    (Metrics Storage)             │ │  │
-│  │  │   Fuzzy    │  │     │  └──────────────────────────────────┘ │  │
-│  │  │  (Q-Fuzzy) │  │     │                                      │  │
-│  │  └────────────┘  │     │                                      │  │
-│  └──────────────────┘     └──────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-```
 
-### File dan Tanggung Jawab
+### File Responsibilities
 
-| File | Kelas/Fungsi | Tanggung Jawab |
-|------|-------------|----------------|
-| `train.py` | - | Entry point, inisialisasi, konfigurasi |
-| `trainer.py` | `Trainer` | Orkestrator episode loop, checkpoint, signal handling |
-| `environment/environment.py` | `KubernetesEnv` | Interface ke Kubernetes, hitung reward, kelola state |
-| `rl/q_learning.py` | `QLearning` | Agent Q-Learning dengan state kontinu |
-| `rl/q_learning_fuzzy.py` | `QLearningFuzzy` | Agent Q-Learning dengan state fuzzy |
-| `rl/fuzzy.py` | `Fuzzy` | Fuzzifikasi state, membership function |
-| `utils/metrics.py` | `get_metrics()` | Query Prometheus, hitung CPU/MEM/RT/RPS |
-| `utils/cluster.py` | `wait_for_pods_ready()` | Tunggu pod ready setelah scaling |
-| `utils/logger.py` | `log_verbose_details()` | Visualisasi metrik per iterasi |
-| `database/influxdb.py` | `InfluxDB` | Penyimpanan metrik ke InfluxDB |
+| File                         | Class/Function          | Responsibility                                        |
+| ---------------------------- | ----------------------- | ----------------------------------------------------- |
+| `train.py`                   | —                       | Entry point, initialization, configuration            |
+| `trainer.py`                 | `Trainer`               | Episode loop orchestration, checkpoint, signals       |
+| `environment/environment.py` | `KubernetesEnv`         | Kubernetes interface, reward calculation, state       |
+| `rl/q_learning.py`           | `QLearning`             | Q-Learning agent with continuous state                |
+| `rl/q_learning_fuzzy.py`     | `QLearningFuzzy`        | Q-Learning agent with fuzzified state                 |
+| `rl/fuzzy.py`                | `Fuzzy`                 | State fuzzification, membership functions             |
+| `utils/metrics.py`           | `get_metrics()`         | Prometheus queries, CPU/memory/RT computation         |
+| `utils/cluster.py`           | `wait_for_pods_ready()` | Wait for pods to become ready after scaling           |
+| `database/influxdb.py`       | `InfluxDB`              | Metrics storage to InfluxDB                           |
 
 ---
 
 ## 3. Training Loop — Trainer Class
 
-Training loop berada di `trainer.py:102-151`:
+The training loop is in `trainer.py`:
 
 ```python
 def train(self, episodes, note, start_time):
-    self._install_signal_handlers()       # Tangani SIGINT/SIGTERM
+    self._install_signal_handlers()
     total_best = float("-inf")
 
     for ep in range(episodes):
-        agent.add_episode_count()          # Increment episode counter
-        obs = env.reset()                  # Reset environment
+        agent.add_episode_count()
+        obs = env.reset()
         total = 0.0
 
-        while True:                        # Iteration loop
-            act = agent.get_action(obs)    # Pilih aksi (epsilon-greedy)
-            nxt, rew, term, info = env.step(act)  # Eksekusi aksi
-            agent.update_q_table(obs, act, rew, nxt)  # Update Q-value
+        while True:
+            act = agent.get_action(obs)
+            nxt, rew, term, info = env.step(act)
+            agent.update_q_table(obs, act, rew, nxt)
             total += rew
             obs = nxt
 
-            if term:                       # Episode selesai?
+            if term:
                 break
 
-        if total > total_best:             # Best model?
+        if total > total_best:
             total_best = total
             self._save_checkpoint(ep, total_best, note, start_time)
 ```
 
-### Struktur Episode
+### Episode Structure
 
-Satu training session terdiri dari beberapa episode, dan setiap episode terdiri dari beberapa iterasi (step):
-
-```
+```text
 Training Session
-├── Episode 1  (iteration = 10 step)
+├── Episode 1  (N iterations)
 │   ├── Step 1:  get_action → step → update_q_table
 │   ├── Step 2:  get_action → step → update_q_table
 │   ├── ...
-│   └── Step 10: get_action → step → update_q_table → terminated
+│   └── Step N:  get_action → step → update_q_table → terminated
 │
-├── Episode 2  (iteration = 10 step)
+├── Episode 2  (N iterations)
 │   ├── Step 1:  reset → get_action → step → update_q_table
 │   ├── ...
-│   └── Step 10: terminated
+│   └── Step N:  terminated
 │
-└── Episode N
+└── Episode M
 ```
 
-Setiap step melibatkan **interaksi nyata dengan cluster Kubernetes** — scaling deployment, menunggu pod ready, mengumpulkan metrik. Ini bukan simulasi.
+Each step involves **real interaction with the Kubernetes cluster** — scaling the deployment, waiting for pods to become ready, and collecting metrics from Prometheus. This is not a simulation.
 
-### Signal Handling (line 79–100)
+### Signal Handling
 
-Trainer menangani SIGINT (Ctrl+C) dan SIGTERM secara graceful:
+The Trainer handles SIGINT (Ctrl+C) and SIGTERM gracefully:
 
 ```python
 def _signal_handler(self, signum, frame):
-    self._interrupted_save()   # Simpan model sebelum exit
+    self._interrupted_save()
     raise KeyboardInterrupt
 ```
 
-Model yang tersimpan saat interupsi disimpan di `model/{type}/{timestamp}/interrupted/`.
+The model saved during interruption goes to `model/{type}/{timestamp}/interrupted/`.
 
 ---
 
 ## 4. Environment: reset()
 
-Fungsi `reset()` dipanggil di awal setiap episode (`environment.py:1120-1140`):
+Called at the start of each episode:
 
 ```python
 def reset(self):
-    self.iteration = self.initial_iteration    # Reset counter iterasi
-    self.replica_state = self.min_replicas      # Kembalikan ke replica minimum
-    self._scale_and_get_metrics()               # Scale ke min & ambil metrik
-    self.last_action = 0                        # Reset aksi terakhir
-    self.action_history = []                    # Kosongkan riwayat aksi
-    self.cumulative_reward = 0.0                # Reset cumulative reward
-    self.episode_reward = 0.0                   # Reset episode reward
-    self.episode_number += 1                    # Increment episode counter
-    return self._get_observation()              # Return observasi awal
+    self.iteration = self.initial_iteration
+    self.replica_state = self.min_replicas
+    self._scale_and_get_metrics()
+    self.last_replica = self.min_replicas
+    self.episode_reward = 0.0
+    self.episode_number += 1
+    return self._get_observation()
 ```
 
-### Apa yang Terjadi Saat Reset
+What happens during reset:
 
-1. **Deployment di-scale ke minimum** (misalnya 1 pod) — ini adalah starting point yang konsisten
-2. **Menunggu pod ready** via Prometheus query
-3. **Mengumpulkan metrik awal** — CPU, memory, response time, request rate
-4. **Mengembalikan observasi** — dictionary berisi semua state variable
+1. **Deployment is scaled to minimum replicas** (e.g., 1 pod) — consistent starting point
+2. **Pods are waited on** via Prometheus query
+3. **Initial metrics are collected** — CPU, memory, response time
+4. **Observation is returned** — dict containing all state variables
 
-Ini berarti setiap episode dimulai dari kondisi yang sama: jumlah replica minimum, memberikan agent "clean slate" untuk belajar.
+Every episode starts from the same condition (minimum replicas), giving the agent a "clean slate" to learn from.
 
 ---
 
-## 5. Agent: get_action()
+## 5. Agent: get\_action()
 
-Pemilihan aksi menggunakan **epsilon-greedy policy** (`q_learning.py:83-94`):
+Action selection uses the **epsilon-greedy policy**:
 
 ```python
 def get_action(self, observation):
-    state_key = self.get_state_key(observation)  # Konversi observasi ke state key
+    state_key = self.get_state_key(observation)
 
     if state_key not in self.q_table:
-        self.q_table[state_key] = np.zeros(100)  # Inisialisasi Q-value = 0
+        self.q_table[state_key] = np.zeros(self.n_actions)
 
-    if np.random.rand() < self.epsilon:          # Eksplorasi
-        action = np.random.randint(0, 100)       # Aksi random (0-99)
-    else:                                         # Eksploitasi
-        action = np.argmax(self.q_table[state_key])  # Aksi terbaik
+    if np.random.rand() < self.epsilon:
+        action = np.random.randint(1, self.n_actions + 1)  # explore
+    else:
+        action = int(np.argmax(self.q_table[state_key])) + 1  # exploit
 
-    return action
+    return action  # 1-based replica count
 ```
 
-### Interpretasi Aksi
+### Action Interpretation
 
-Action space: integer 0–99, diinterpretasikan sebagai **persentase dari rentang replica**:
+The action space is integers 1 to `max_replicas`, representing the **number of replicas directly** — no percentage conversion.
 
-```python
-# Di environment.step():
-percentage = action / 99.0
-replica_state = round(min_replicas + percentage * range_replicas)
+| Action (return value) | Q-table Index | Replicas |
+| --------------------- | ------------- | -------- |
+| 1                     | 0             | 1        |
+| 2                     | 1             | 2        |
+| 5                     | 4             | 5        |
+| 12                    | 11            | 12       |
+
+### Epsilon-Greedy Decay
+
+```text
+epsilon_start=0.1  →  decay per step  →  epsilon_min=0.01
 ```
 
-| Action | Percentage | Replicas (min=1, max=12) |
-|--------|-----------|-------------------------|
-| 0 | 0.0% | 1 |
-| 9 | 9.1% | 2 |
-| 18 | 18.2% | 3 |
-| 27 | 27.3% | 4 |
-| 45 | 45.5% | 6 |
-| 63 | 63.6% | 8 |
-| 81 | 81.8% | 10 |
-| 99 | 100.0% | 12 |
-
-### Epsilon-Greedy Exploration
-
-```
-Epsilon = 0.1 (awal)  →  Epsilon = 0.01 (minimum)
-         │                          │
-         ▼                          ▼
-   10% random action          1% random action
-   90% best Q-value          99% best Q-value
-```
-
-Epsilon di-decay setiap kali `update_q_table()` dipanggil:
+Epsilon decays after every `update_q_table()` call:
 
 ```python
 epsilon = max(epsilon_min, epsilon * epsilon_decay)
 ```
 
-Contoh decay: `0.1 → 0.099 → 0.098 → ... → 0.01 (min)`
-
 ---
 
 ## 6. Environment: step()
 
-Fungsi `step()` adalah inti interaksi agent-environment (`environment.py:1027-1118`):
+The core agent-environment interaction:
 
 ```python
 def step(self, action, q_table_size=0):
-    # 1. Catat perubahan aksi
-    self.action_change = action - self.last_action
-    self.last_action = action
-    self.action_history.append(action)
+    self.last_replica = action
 
-    # 2. Simpan request rate sebelumnya (untuk trend detection)
-    self.previous_request_rate = self.request_rate
+    self.replica_state = max(self.min_replicas, min(action, self.max_replicas))
 
-    # 3. Konversi aksi ke jumlah replica
-    percentage = action / 99.0
-    self.replica_state = round(min_replicas + percentage * range_replicas)
-    self.replica_state = clamp(self.replica_state, min_replicas, max_replicas)
-
-    # 4. Scale cluster dan ambil metrik
     self._scale_and_get_metrics()
 
-    # 5. Hitung trend request rate
-    self.request_rate_trend = self.request_rate - self.previous_request_rate
-
-    # 6. Hitung reward
     reward, reward_breakdown = self._calculate_reward()
 
-    # 7. Kurangi iterasi, cek terminasi
     self.iteration -= 1
     terminated = self.iteration <= 0
 
-    # 8. Buat observasi baru
     observation = self._get_observation()
 
-    # 9. Simpan ke InfluxDB
     self.influxdb.write_point(...)
 
     return observation, reward, terminated, info
 ```
 
-### Timeline Satu Step
+### Single Step Timeline
 
-```
-t=0s    Agent memilih action (mis: action=45 → 6 replicas)
+```text
+t=0s    Agent selects action (e.g., action=6 → 6 replicas)
         │
-t=0s    Environment memanggil Kubernetes API untuk scale
+t=0s    Environment calls Kubernetes API to scale
         │
-t=1-60s Menunggu pod ready (wait_for_pods_ready)
-        │ - Query Prometheus setiap detik
-        │ - Cek: ready_replicas == desired_replicas?
+t=1-?s  Wait for pods to be ready (wait_for_pods_ready)
+        │ - Poll Prometheus every second
+        │ - Check: ready_replicas == desired_replicas?
         │
-t=60s   Menunggu stabilisasi metrik (wait_time=60s)
-        │ - Pod sudah running tapi metrik belum stabil
-        │ - Butuh waktu agar CPU/MEM/RT mencerminkan load sebenarnya
+t=Xs    Wait for metrics to stabilize (wait_time=60s)
+        │ - Pods are running but metrics not yet stable
+        │ - Need time for CPU/memory/RT to reflect actual load
         │
-t=60s+  Mengumpulkan metrik dari Prometheus
-        │ - CPU usage (rata-rata semua pod)
-        │ - Memory usage (rata-rata semua pod)
+t=X+    Collect metrics from Prometheus
+        │ - CPU usage (mean across all pods)
+        │ - Memory usage (mean across all pods)
         │ - Response time (P90 quantile)
-        │ - Request rate (total RPS)
         │
-t=...   Hitung reward berdasarkan metrik
+t=...   Calculate reward
         │
 t=...   Return (observation, reward, terminated, info)
 ```
 
-**Catatan penting:** Setiap step memakan waktu **~1-3 menit** di dunia nyata karena melibatkan scaling dan pengumpulan metrik real-time. Ini bukan simulasi — agent belajar dari cluster Kubernetes yang sebenarnya.
+Each step takes **~1-3 minutes** in wall-clock time because it involves real scaling and live metric collection.
 
 ---
 
-## 7. Interaksi dengan Kubernetes Cluster
+## 7. Kubernetes Cluster Interaction
 
-### 7.1 Scaling — `_scale()` (environment.py:210-292)
+### 7.1 Scaling — `_scale()`
 
 ```python
 def _scale(self):
@@ -417,45 +377,38 @@ def _scale(self):
     )
 ```
 
-Mekanisme scaling menggunakan **Kubernetes Python Client** untuk memanggil API `PATCH /apis/apps/v1/namespaces/{ns}/deployments/{name}/scale`.
+Uses the **Kubernetes Python Client** to call `PATCH /apis/apps/v1/namespaces/{ns}/deployments/{name}/scale`.
 
 **Retry logic:**
-- Exponential backoff: delay mulai 1s, max 30s
-- Timeout juga naik: 60s → max 300s
-- Retry hingga `max_scaling_retries` (default: 1000)
-- Menangani error spesifik: etcd timeout (500), conflict (409), API error lainnya
 
-### 7.2 Menunggu Pod Ready — `wait_for_pods_ready()` (cluster.py:7-99)
+- Exponential backoff: delay starts at 1s, max 30s
+- Timeout also increases: 60s → max 300s
+- Retry up to `max_scaling_retries` (default: 1000)
+- Handles specific errors: etcd timeout (500), conflict (409)
 
-Setelah scaling, environment menunggu hingga semua pod dalam status **Ready**:
+### 7.2 Waiting for Pods — `wait_for_pods_ready()`
+
+After scaling, the environment waits until all pods are **Ready**:
 
 ```python
 def wait_for_pods_ready(prometheus, deployment_name, desired_replicas, ...):
     while time.time() - start_time < timeout:
-        # Query Prometheus untuk desired replicas
         desired = prometheus.custom_query(q_desired)
-
-        # Query Prometheus untuk ready replicas
         ready = prometheus.custom_query(q_ready)
 
         if ready_replicas == desired_replicas:
             return True, desired, ready
 
-        time.sleep(1)  # Polling setiap detik
+        time.sleep(1)
 
-    return False, desired, ready  # Timeout
+    return False, desired, ready  # timeout
 ```
-
-Query Prometheus menggunakan PromQL yang memfilter pod berdasarkan:
-1. Pod harus punya `kube_pod_status_ready{condition="true"}`
-2. Pod harus milik ReplicaSet yang dimiliki Deployment target
-3. Pod harus di namespace yang benar
 
 ---
 
-## 8. Pengumpulan Metrik dari Prometheus
+## 8. Prometheus Metrics Collection
 
-Fungsi `get_metrics()` (`utils/metrics.py:375-514`) mengumpulkan 4 metrik utama:
+`get_metrics()` collects 4 main metrics:
 
 ### 8.1 CPU Usage
 
@@ -467,9 +420,9 @@ sum by (pod) (
 )
 ```
 
-- Menggunakan `rate()` dengan interval 15 detik
-- Dihitung sebagai **persentase dari CPU limit** per pod
-- Hasil akhir: `np.nanmean(cpu_percentages)` — rata-rata semua pod
+- Uses `rate()` with 15-second window
+- Computed as **percentage of CPU limit** per pod
+- Result: `np.nanmean(cpu_percentages)` — average across all pods
 
 ### 8.2 Memory Usage
 
@@ -481,9 +434,9 @@ sum by (pod) (
 )
 ```
 
-- Menggunakan `working_set_bytes` (bukan RSS) — lebih akurat untuk Kubernetes
-- Dihitung sebagai **persentase dari memory limit** per pod
-- Hasil akhir: `np.nanmean(memory_percentages)`
+- Uses `working_set_bytes` (more accurate than RSS for Kubernetes)
+- Computed as **percentage of memory limit** per pod
+- Result: `np.nanmean(memory_percentages)`
 
 ### 8.3 Response Time
 
@@ -499,10 +452,9 @@ sum by (pod) (
 )
 ```
 
-- Menggunakan **histogram quantile P90** — 90% request selesai di bawah nilai ini
-- Dihitung dalam **milidetik** (dikali 1000 dari seconds)
-- Bisa multi-endpoint: rata-rata dari semua endpoint yang di-monitor
-- Endpoint health check (`/metrics`, `/healthz`) dikecualikan
+- Uses **P90 quantile** — 90% of requests complete below this value
+- Result in **milliseconds** (multiplied by 1000)
+- Health check endpoints (`/metrics`, `/healthz`) excluded
 
 ### 8.4 Request Rate
 
@@ -515,355 +467,239 @@ sum(
 )
 ```
 
-- Total **Requests Per Second (RPS)** ke deployment
-- Mengecualikan health check dan metrics endpoint
-- Nilai ini akan dinormalisasi terhadap kapasitas cluster di `_get_observation()`
-
-### 8.5 Retry Logic
-
-Setiap metrik di-query dengan retry hingga:
-1. Jumlah pod yang terdeteksi == jumlah replica yang diharapkan
-2. Timeout tercapai
-
-Ini memastikan metrik yang dikumpulkan **konsisten** dan mencerminkan semua pod.
-
-### 8.6 Alur Pengumpulan Metrik
-
-```
-_scale_and_get_metrics()
-    │
-    ├── _scale()                          ← Kubernetes API: patch deployment
-    │
-    ├── wait_for_pods_ready()             ← Prometheus: cek pod readiness
-    │
-    └── get_metrics()
-        │
-        ├── sleep(wait_time)              ← Tunggu metrik stabil
-        │
-        ├── check_prometheus_connection() ← Pastikan Prometheus reachable
-        │
-        ├── _scrape_metrics()
-        │   ├── CPU usage query           ← rate(container_cpu_usage)
-        │   ├── Memory usage query        ← container_memory_working_set
-        │   ├── CPU limits query          ← kube_pod_container_resource_limits
-        │   └── Memory limits query       ← kube_pod_container_resource_limits
-        │
-        ├── _metrics_result()
-        │   ├── CPU % = (usage / limit) * 100   per pod
-        │   └── MEM % = (usage / limit) * 100   per pod
-        │
-        ├── _get_response_time()          ← histogram_quantile P90
-        │
-        └── _get_request_rate()           ← rate(app_requests_total)
-        │
-        └── Return: (cpu_mean, mem_mean, response_time, request_rate, pod_count)
-```
+- Total **Requests Per Second (RPS)** to the deployment
+- **Note:** Request rate is collected but **not used** in the state key or reward function — only available for logging and post-training analysis.
 
 ---
 
-## 9. Observasi (State Representation)
+## 9. Observation (State Representation)
 
-Fungsi `_get_observation()` (`environment.py:992-1025`) menghasilkan dictionary yang menjadi **input** bagi agent:
+`_get_observation()` returns the dict that becomes input to the agent:
 
 ```python
 {
-    # Core resource metrics (0-100%)
-    "cpu_usage": 55.2,                    # Rata-rata CPU usage semua pod
-    "memory_usage": 62.1,                 # Rata-rata memory usage semua pod
-    "response_time": 45.0,               # RT sebagai % dari max_response_time
-    "response_time_ms": 45.0,            # RT dalam milidetik (untuk logging)
+    # === STATE KEY COMPONENTS (4 components, used for Q-table key) ===
+    "cpu_usage": 55.2,       # Mean CPU usage across all pods (0-100%)
+    "memory_usage": 62.1,    # Mean memory usage across all pods (0-100%)
+    "response_time": 45.0,   # RT as % of max_response_time, capped at 100
+    "last_replica": 6,       # Previous action (1 to max_replicas)
 
-    # Request rate metrics
-    "request_rate": 200.5,               # Total RPS (raw value)
-    "request_rate_normalized": 62.7,     # RPS sebagai % dari kapasitas cluster
-    "request_rate_trend": 15.3,          # Delta RPS dari step sebelumnya
-    "request_rate_trend_category": "up", # Kategori: up/down/stable
-
-    # Action dan system state
-    "last_action": 45,                   # Aksi terakhir (0-99)
-    "action_trend_category": "up",       # Tren aksi: up/down/stable
-    "current_replicas": 6.0,             # Jumlah pod saat ini
+    # === AUXILIARY FIELDS (NOT in state key — logging only) ===
+    "response_time_ms": 45.0,     # Raw RT in milliseconds
+    "current_replicas": 6.0,      # Current pod count
 }
 ```
 
-### Normalisasi Metrik
+State representation uses **4 components**. The `response_time` field implicitly captures the effect of request rate — when request rate is high and pods are insufficient, response time rises. By removing redundancy, the state space is smaller and convergence is faster.
 
-| Metrik | Formula | Contoh |
-|--------|---------|--------|
+### Metric Normalization
+
+| Metric          | Formula                            | Example                        |
+| --------------- | ---------------------------------- | ------------------------------ |
 | `response_time` | `min((RT_ms / max_RT) * 100, 100)` | `min((45/100)*100, 100) = 45%` |
-| `request_rate_normalized` | `min((RPS / (pod_capacity * replicas)) * 100, 100)` | `min((200/(80*4))*100, 100) = 62.5%` |
-
-### Trend Detection
-
-**Request Rate Trend** (`environment.py:929-941`):
-
-```python
-trend = request_rate - previous_request_rate
-
-if trend > 5.0:      return "up"
-elif trend < -5.0:   return "down"
-else:                return "stable"
-```
-
-Threshold ±5.0 RPS — perubahan di bawah ini dianggap noise.
-
-**Action Trend** (`environment.py:943-990`):
-
-Menggunakan **linear regression** pada 5 aksi terakhir (sliding window):
-
-```python
-history = action_history[-5:]  # 5 aksi terakhir
-slope = linear_regression(history)
-scaled_slope = slope * 5  # Scale ke meaningful range
-
-if scaled_slope > 5.0:    return "up"    # Agent cenderung scale up
-elif scaled_slope < -5.0: return "down"  # Agent cenderung scale down
-else:                     return "stable"
-```
-
-Ini mendeteksi **pola scaling** — apakah agent konsisten menambah, mengurangi, atau mempertahankan replica.
+| `last_replica`  | Direct value (1 to max\_replicas)  | `6` (6 replicas)               |
 
 ---
 
-## 10. Agent: update_q_table()
+## 10. Agent: update\_q\_table()
 
-Setelah menerima reward, Q-value di-update menggunakan **Bellman equation** (`q_learning.py:96-116`):
+After receiving the reward, Q-values are updated using the **Bellman equation**:
 
 ```python
 def update_q_table(self, observation, action, reward, next_observation):
     state_key = self.get_state_key(observation)
     next_state_key = self.get_state_key(next_observation)
 
-    # Inisialisasi state baru jika belum ada
-    if state_key not in self.q_table:
-        self.q_table[state_key] = np.zeros(100)
-    if next_state_key not in self.q_table:
-        self.q_table[next_state_key] = np.zeros(100)
+    action_idx = action - 1  # convert 1-based action to 0-based index
 
-    # Q-Learning update rule (Bellman equation)
+    if state_key not in self.q_table:
+        self.q_table[state_key] = np.zeros(self.n_actions)
+    if next_state_key not in self.q_table:
+        self.q_table[next_state_key] = np.zeros(self.n_actions)
+
     best_next = np.max(self.q_table[next_state_key])
-    self.q_table[state_key][action] += learning_rate * (
-        reward + discount_factor * best_next - self.q_table[state_key][action]
+    self.q_table[state_key][action_idx] += learning_rate * (
+        reward + discount_factor * best_next - self.q_table[state_key][action_idx]
     )
 
-    # Decay epsilon
     epsilon = max(epsilon_min, epsilon * epsilon_decay)
 ```
 
-### Formula Q-Learning
+### Q-Learning Formula
 
-```
+```text
 Q(s, a) ← Q(s, a) + α * [r + γ * max_a'(Q(s', a')) - Q(s, a)]
                       │    │   │                        │
-                      │    │   │                        └── Estimasi lama
-                      │    │   └── Estimasi terbaik di state berikutnya
-                      │    └── Reward yang diterima
+                      │    │   │                        └── Old estimate
+                      │    │   └── Best value in next state
+                      │    └── Reward received
                       └── Learning rate
 ```
 
-### Contoh Perhitungan Update
+### Update Example
 
+```text
+State: (CPU=55%, MEM=60%, RT=45%, last_replica=6)
+Action: 6 (index=5), Reward: 0.80, Next state best Q: 0.90
+
+Before: Q[(55,60,45,6), index=5] = 0.50
+
+Update: Q += 0.1 * (0.80 + 0.95 * 0.90 - 0.50)
+        Q += 0.1 * (0.80 + 0.855 - 0.50)
+        Q += 0.1 * 1.155 = 0.1155
+
+After:  Q[(55,60,45,6), index=5] = 0.6155
 ```
-State saat ini: (CPU=55%, MEM=60%, RT=45%, ...)
-Action: 45 (→ 6 replicas)
-Reward: 1.75
-State berikutnya: (CPU=50%, MEM=55%, RT=40%, ...)
-
-Sebelum update:
-  Q[(55,60,45,...), 45] = 0.5
-  max Q[(50,55,40,...), *] = 0.8
-
-Update:
-  Q(s,a) += 0.1 * (1.75 + 0.95 * 0.8 - 0.5)
-  Q(s,a) += 0.1 * (1.75 + 0.76 - 0.5)
-  Q(s,a) += 0.1 * 2.01
-  Q(s,a) += 0.201
-  Q(s,a) = 0.5 + 0.201 = 0.701
-```
-
-Setelah update:
-- Q-value untuk aksi 45 di state (55,60,45,...) naik dari 0.5 menjadi 0.701
-- Agent akan lebih cenderung memilih aksi 45 (6 replicas) di state serupa ke depannya
 
 ---
 
-## 11. Perbedaan State Key: Q-Learning vs Q-Fuzzy
+## 11. State Key Differences: Q-Learning vs Q-Fuzzy
 
-### Q-Learning: State Key Kontinu
+### Q-Learning: Continuous State Key (4 components)
 
 ```python
-# q_learning.py:41-81
 def get_state_key(self, observation):
     return (
-        cpu_usage,                    # float: 55.23
-        memory_usage,                 # float: 62.10
-        response_time,                # float: 45.00
-        request_rate_normalized,      # float: 62.50
-        request_rate_trend_category,  # str:   "up"
-        last_action,                  # float: 45
-        action_trend_category,        # str:   "stable"
+        cpu_usage,      # float: 55.23
+        memory_usage,   # float: 62.10
+        response_time,  # float: 45.00
+        last_replica,   # int:   6
     )
 ```
 
-**Contoh state key:** `(55.23, 62.10, 45.00, 62.50, "up", 45, "stable")`
+**Example state key:** `(55.23, 62.10, 45.00, 6)`
 
-**Masalah:** Karena CPU, memory, dll. adalah float kontinu, kemungkinan dua state yang **identik** sangat kecil. Misalnya:
-- `(55.23, 62.10, ...)` dan `(55.24, 62.10, ...)` adalah state berbeda
-- Q-table tumbuh sangat besar tapi setiap state jarang dikunjungi ulang
-- Generalisasi sulit — pengalaman di satu state tidak mentransfer ke state mirip
+**Problem:** Because CPU, memory, and response time are continuous floats, two states being *identical* is nearly impossible. The Q-table grows very large but each state is rarely revisited. Generalization is difficult — experience from one state does not transfer to similar states.
 
-### Q-Learning Fuzzy: State Key Diskrit
+### Q-Learning Fuzzy: Discrete State Key (4 components)
 
 ```python
-# q_learning_fuzzy.py:44-94
 def get_state_key(self, observation):
     fuzzy_state = self.fuzzy.fuzzify(observation)
 
-    cpu_label = max(fuzzy_state["cpu_usage"], key=...)     # "medium"
-    mem_label = max(fuzzy_state["memory_usage"], key=...)  # "high"
+    cpu_label = max(fuzzy_state["cpu_usage"], key=...)      # "medium"
+    mem_label = max(fuzzy_state["memory_usage"], key=...)   # "high"
     resp_label = max(fuzzy_state["response_time"], key=...) # "low"
-    req_rate_label = max(fuzzy_state["request_rate_normalized"], key=...)
-    last_action_label = max(fuzzy_state["last_action"], key=...)
+    last_label = max(fuzzy_state["last_replica"], key=...)  # "medium"
 
-    return (
-        cpu_label,                    # str: "medium"
-        mem_label,                    # str: "high"
-        resp_label,                   # str: "low"
-        req_rate_label,               # str: "medium"
-        request_rate_trend_category,  # str: "up"
-        last_action_label,            # str: "medium"
-        action_trend_category,        # str: "stable"
-    )
+    return (cpu_label, mem_label, resp_label, last_label)
 ```
 
-**Contoh state key:** `("medium", "high", "low", "medium", "up", "medium", "stable")`
+**Example state key:** `("medium", "high", "low", "medium")`
 
-**Keuntungan:** State space jauh lebih kecil:
-- 5 label fuzzy x 5 metrik = 5^5 = 3.125 kombinasi resource
-- x 3 trend request x 3 trend action = 3.125 x 9 = 28.125 state teoritis
-- Dalam praktik, banyak kombinasi yang tidak terjadi → lebih compact
-- **Generalisasi**: CPU=55.2% dan CPU=52.8% sama-sama "medium" → berbagi Q-value
+**Advantage:** State space is much smaller:
 
-### Perbandingan
+- 3 fuzzy labels × 4 metrics (cpu, mem, response\_time, last\_replica) = 3^4 = **81 theoretical states**
+- In practice, many combinations never occur — very compact
+- **Generalization**: CPU=55.2% and CPU=52.8% both map to "medium" — sharing the same Q-value
 
-| Aspek | Q-Learning (Kontinu) | Q-Fuzzy (Diskrit) |
-|-------|---------------------|-------------------|
-| State key | `(55.23, 62.10, 45.00, ...)` | `("medium", "high", "low", ...)` |
-| Ukuran Q-table | Potensial tak terbatas | Maksimal ~28.125 state |
-| Kunjungan ulang state | Sangat jarang | Sering |
-| Generalisasi | Tidak ada | Otomatis via fuzzifikasi |
-| Presisi | Tinggi (per titik) | Rendah (per kategori) |
-| Konvergensi | Lebih lambat | Lebih cepat |
-| Reward function | **SAMA** | **SAMA** |
+### Comparison
+
+| Aspect               | Q-Learning (Continuous)     | Q-Fuzzy (Discrete)                    |
+| -------------------- | --------------------------- | ------------------------------------- |
+| State key            | (55.23, 62.10, 45.00, 6)   | ("medium", "high", "low", "medium")   |
+| State components     | 4 (3 float + 1 int)         | 4 (4 fuzzy labels)                    |
+| Q-table size         | Potentially unbounded       | Max 81 states (3^4)                   |
+| State revisits       | Very rare                   | Frequent                              |
+| Generalization       | None                        | Automatic via fuzzification           |
+| Convergence speed    | Slower                      | Faster                                |
+| Reward function      | **Identical**               | **Identical**                         |
 
 ---
 
-## 12. Fuzzy Logic — Fuzzifikasi State
+## 12. Fuzzy Logic — State Fuzzification
 
 ### 12.1 Membership Function
 
-Kelas `Fuzzy` (`rl/fuzzy.py`) mendefinisikan **trapezoidal membership function** untuk setiap metrik:
+The `Fuzzy` class (`rl/fuzzy.py`) defines **trapezoidal membership functions** for each metric:
 
-```
-Derajat keanggotaan
-1.0 ─────┐        ┌─────
-         │       /│\
-         │      / │ \
-         │     /  │  \
-         │    /   │   \
-0.0 ─────┘───/────│────\────
-         a   b    c    d     → nilai input
+```text
+Membership degree
+1.0 |      _________
+    |     /         \
+    |    /           \
+0.0 |___/             \___
+    a   b             c   d  → input value
 ```
 
-Formula trapezoidal:
+Trapezoidal formula:
 
 ```python
 def _trapezoidal(x, a, b, c, d):
-    if x < a or x > d:    return 0.0    # Di luar range
-    elif b <= x <= c:      return 1.0    # Fully member
-    elif a < x < b:        return (x - a) / (b - a)  # Naik
-    else:                  return (d - x) / (d - c)  # Turun
+    if x < a or x > d:  return 0.0   # outside range
+    elif b <= x <= c:   return 1.0   # fully member
+    elif a < x < b:     return (x - a) / (b - a)  # rising
+    else:               return (d - x) / (d - c)  # falling
 ```
 
-### 12.2 Definisi Membership untuk CPU Usage
+### 12.2 Membership Definitions (3 Levels: low, medium, high)
 
+Each metric uses **3 membership levels**:
+
+```text
+1.0  ┬──low──┐         ┌─medium──┐         ┌──high──┬
+     │        │\       /│         │\       /│         │
+     │        │ \     / │         │ \     / │         │
+0.0  └────────┴──\───/──┴─────────┴──\───/──┴─────────┘
+     0    20  30  40  45    55   60  70  80       100 (%)
 ```
-1.0  ┬─very_low──┐    ┌──low───┐    ┌─medium──┐    ┌──high───┐    ┌─very_high─┬
-     │           │   /│\       │\  /│         │\  /│\        │\  /│           │
-     │           │  / │ \     / │\/ │         │ \/ │ \      / │\/ │           │
-     │           │ /  │  \   /  │/\ │         │ /\ │  \    /  │/\ │           │
-     │           │/   │   \ /   │  \│         │/  \│   \  /   │  \│           │
-0.0  └───────────┴────┴────┴────┴───┴─────────┴────┴────┴─────┴───┴───────────┘
-     0    10    25   35   45   50   60   65   70   75   85   90   95  100 (%)
-```
 
-| Label | a | b | c | d | Fully Member Range |
-|-------|---|---|---|---|--------------------|
-| very_low | 0 | 0 | 10 | 25 | 0–10% |
-| low | 15 | 25 | 35 | 45 | 25–35% |
-| medium | 40 | 50 | 60 | 70 | 50–60% |
-| high | 65 | 75 | 85 | 90 | 75–85% |
-| very_high | 85 | 95 | 100 | 100 | 95–100% |
+| Label  | a  | b  | c   | d   | Fully Member Range |
+| ------ | -- | -- | --- | --- | ------------------ |
+| low    | 0  | 0  | 20  | 40  | 0–20%              |
+| medium | 30 | 45 | 55  | 70  | 45–55%             |
+| high   | 60 | 80 | 100 | 100 | 80–100%            |
 
-### 12.3 Contoh Fuzzifikasi
+### 12.3 Fuzzification Examples
 
 Input: `CPU = 55%`
 
-```
-very_low(55)  = 0.0    (55 > 25)
-low(55)       = 0.0    (55 > 45)
-medium(55)    = 1.0    (50 ≤ 55 ≤ 60 → fully member)
-high(55)      = 0.0    (55 < 65)
-very_high(55) = 0.0    (55 < 85)
+```text
+low(55)    = 0.0   (55 > 40)
+medium(55) = 1.0   (45 <= 55 <= 55 → fully member)
+high(55)   = 0.0   (55 < 60)
 
-Dominant label: "medium" (derajat 1.0)
+Dominant label: "medium" (degree 1.0)
 ```
 
-Input: `CPU = 42%`
+Input: `CPU = 35%`
 
-```
-very_low(42)  = 0.0
-low(42)       = 0.3    ((45-42)/(45-35) = 3/10 = 0.3 → turun dari low)
-medium(42)    = 0.2    ((42-40)/(50-40) = 2/10 = 0.2 → naik ke medium)
-high(42)      = 0.0
-very_high(42) = 0.0
+```text
+low(35)    = 0.25  ((40-35)/(40-20) = 5/20 = 0.25)
+medium(35) = 0.33  ((35-30)/(45-30) = 5/15 = 0.33)
+high(35)   = 0.0   (35 < 60)
 
-Dominant label: "low" (derajat 0.3 > 0.2)
+Dominant label: "medium" (degree 0.33 > 0.25)
 ```
 
 Input: `CPU = 72%`
 
-```
-very_low(72)  = 0.0
-low(72)       = 0.0
-medium(72)    = 0.0    (72 > 70)
-high(72)      = 0.7    ((72-65)/(75-65) = 7/10 = 0.7 → naik ke high)
-very_high(72) = 0.0    (72 < 85)
+```text
+low(72)    = 0.0   (72 > 40)
+medium(72) = 0.0   (72 > 70)
+high(72)   = 0.6   ((72-60)/(80-60) = 12/20 = 0.6)
 
-Dominant label: "high" (derajat 0.7)
+Dominant label: "high" (degree 0.6)
 ```
 
-### 12.4 Metrik yang Di-fuzzifikasi
+### 12.4 Fuzzified Metrics
 
-Kelima metrik menggunakan definisi membership yang **identik** (semua di skala 0–100%):
+All four metrics use **identical** membership definitions (all on a 0–100% scale):
 
-1. `cpu_usage` — utilisasi CPU
-2. `memory_usage` — utilisasi memory
-3. `response_time` — response time sebagai % dari SLA
-4. `request_rate_normalized` — utilisasi kapasitas cluster
-5. `last_action` — aksi terakhir (0–99, diperlakukan sebagai persentase)
+1. `cpu_usage` — CPU utilization
+2. `memory_usage` — memory utilization
+3. `response_time` — response time as % of SLO
+4. `last_replica` — last action (normalized to 0–100% based on max\_replicas)
 
-Dua metrik kategorikal **tidak di-fuzzifikasi**:
-- `request_rate_trend_category` — sudah diskrit (up/down/stable)
-- `action_trend_category` — sudah diskrit (up/down/stable)
+Total Q-Fuzzy state space: 3 labels × 4 metrics = 3^4 = **81 theoretical combinations**.
 
 ---
 
-## 13. Checkpoint dan Model Saving
+## 13. Checkpoint and Model Saving
 
 ### 13.1 Best Model Checkpoint
 
-Setiap kali episode menghasilkan total reward tertinggi, model disimpan (`trainer.py:153-168`):
+Each time an episode achieves the highest total reward, the model is saved:
 
 ```python
 def _save_checkpoint(self, episode, score, note, start_time):
@@ -872,15 +708,15 @@ def _save_checkpoint(self, episode, score, note, start_time):
     agent.save_model(path, episode + 1)
 ```
 
-**Struktur direktori:**
+**Directory structure:**
 
-```
+```text
 model/
 ├── qlearning/
 │   └── 1706000000_experiment_1/
 │       ├── checkpoints/
 │       │   ├── episode_0_total_5.23.pkl
-│       │   ├── episode_3_total_8.45.pkl    ← Semakin tinggi = semakin baik
+│       │   ├── episode_3_total_8.45.pkl
 │       │   └── episode_7_total_12.10.pkl
 │       ├── interrupted/
 │       │   └── interrupted_episode_5_1706003600.pkl
@@ -890,243 +726,164 @@ model/
     └── ...
 ```
 
-### 13.2 Isi Model File (.pkl)
+### 13.2 Model File Contents (.pkl)
 
 ```python
 model_data = {
-    "q_table": dict,            # {state_key: np.array(100)}
+    "q_table": dict,             # {state_key: np.array(n_actions)}
     "learning_rate": 0.1,
     "discount_factor": 0.95,
-    "epsilon": 0.05,            # Epsilon saat disimpan
+    "epsilon": 0.05,
     "epsilon_min": 0.01,
     "epsilon_decay": 0.99,
-    "n_actions": 100,
-    "created_at": 1706000000,   # Unix timestamp
-    "episodes_trained": 10,     # Total episode yang sudah dilatih
+    "n_actions": 12,             # = max_replicas
+    "created_at": 1706000000,
+    "episodes_trained": 10,
 }
 ```
 
-Diserialisasi menggunakan Python **pickle** — menyimpan seluruh state agent termasuk Q-table.
+Serialized using Python **pickle** — stores the entire agent state including the Q-table.
 
-### 13.3 Auto-Resume
+---
 
-`train.py` mendukung auto-resume (`line 131-156`):
+## 14. Training Hyperparameters
+
+| Parameter             | Default | Source | Effect                                              |
+| --------------------- | ------- | ------ | --------------------------------------------------- |
+| learning_rate (α)     | 0.1     | .env   | How quickly Q-values update per step               |
+| discount_factor (γ)   | 0.95    | .env   | Weight of future vs immediate rewards              |
+| epsilon_start         | 0.1     | .env   | Initial random exploration probability             |
+| epsilon_decay         | 0.99    | .env   | Epsilon reduction rate per step                    |
+| epsilon_min           | 0.01    | .env   | Minimum epsilon (always 1% exploration)            |
+| n_actions             | max_r   | .env   | Number of actions = max replicas                   |
+| episodes              | 10      | .env   | Number of episodes per training session            |
+| iteration             | 10      | .env   | Number of steps per episode                        |
+| wait_time             | 60s     | .env   | Wait time after scaling before collecting metrics  |
+| timeout               | 120s    | .env   | Timeout waiting for pods to become ready           |
+| metrics_interval      | 15s     | .env   | PromQL rate() window                               |
+| metrics_quantile      | 0.90    | .env   | Quantile for response time (P90)                   |
+
+### Time Estimation
+
+```text
+episodes × iteration = total steps per session
+10 × 10 = 100 steps
+
+Each step ≈ 1-3 minutes (scaling + wait_time + metric collection)
+100 steps × ~2 min = ~200 minutes (~3.3 hours) per training session
+```
+
+### Epsilon Decay Behavior
+
+```text
+epsilon_decay^(total_steps) = final epsilon
+0.99^100  = 0.366  → still significant exploration after 100 steps
+0.99^1000 = 0.00004 → near-full exploitation after 1000 steps
+```
+
+---
+
+## 15. End-to-End Training Diagram
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                          train.py                             │
+│  1. Setup Logger                                              │
+│  2. Connect InfluxDB                                          │
+│  3. Initialize Environment (KubernetesEnv)                    │
+│  4. Initialize Agent (QLearning / QLearningFuzzy)             │
+│  5. Initialize Trainer                                        │
+│  6. trainer.train(episodes=N)                                 │
+└────────────────────────┬─────────────────────────────────────┘
+                         │
+                         ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    EPISODE LOOP (1..N)                        │
+│                                                              │
+│  env.reset()                                                  │
+│    ├── replica_state = min_replicas                           │
+│    ├── K8s API: scale deployment to min                       │
+│    ├── Prometheus: wait_for_pods_ready()                      │
+│    ├── sleep(wait_time)                                       │
+│    ├── Prometheus: get_metrics(CPU, MEM, RT, RPS)             │
+│    ├── Reset: rewards, counters                               │
+│    └── Return: observation (dict)                             │
+│                         │                                    │
+│                         ▼                                    │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │             ITERATION LOOP (1..M)                    │    │
+│  │                                                      │    │
+│  │  STEP 1: agent.get_action(observation)               │    │
+│  │    ├── state_key = get_state_key(obs) (4 components) │    │
+│  │    │   Q-Learning: (55.2, 62.1, 45.0, 6)            │    │
+│  │    │   Q-Fuzzy:    ("medium","high","low","med")     │    │
+│  │    ├── if new state: Q[state] = zeros(n_actions)     │    │
+│  │    ├── epsilon-greedy:                               │    │
+│  │    │   random < epsilon → random action (1..max_r)  │    │
+│  │    │   else → argmax(Q[state]) + 1                  │    │
+│  │    └── Return: action (1-based replica count)        │    │
+│  │                         │                           │    │
+│  │  STEP 2: env.step(action)                            │    │
+│  │    ├── replica_state = action (no conversion)        │    │
+│  │    ├── K8s API: patch_deployment_scale(replicas)     │    │
+│  │    ├── Prometheus: poll ready_replicas == desired    │    │
+│  │    ├── sleep(wait_time)                              │    │
+│  │    ├── CPU: rate(cpu_usage) / limits * 100           │    │
+│  │    ├── MEM: working_set_bytes / limits * 100         │    │
+│  │    ├── RT:  histogram_quantile(0.90, latency)        │    │
+│  │    ├── reward = R_rt - R_cost                        │    │
+│  │    ├── Write to InfluxDB                             │    │
+│  │    └── Return: (next_obs, reward, terminated, info)  │    │
+│  │                         │                           │    │
+│  │  STEP 3: agent.update_q_table(obs, act, rew, nxt)   │    │
+│  │    ├── Q[s,a] += α * (r + γ * max_Q(s') - Q[s,a])  │    │
+│  │    └── epsilon *= epsilon_decay                      │    │
+│  │                         │                           │    │
+│  │  terminated? → No: loop | Yes: break                │    │
+│  └──────────────────────────────────────────────────────┘    │
+│                         │                                    │
+│  total_reward > best?                                         │
+│    Yes → _save_checkpoint(episode, total_reward)              │
+│    No  → next episode                                         │
+└──────────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+  Save final model to model/{type}/{timestamp}/final/
+```
+
+---
+
+## PART B: PREDICTION FLOW
+
+## 16. Prediction Initialization
+
+Prediction starts from `predict.py`. The key difference from training:
 
 ```python
-if auto_resume:
-    latest = find_latest_checkpoint(algorithm)  # Cari checkpoint terbaru
-    if latest:
-        resume_path = latest
-```
+# 1-4: Same as training (logger, influxdb, environment, agent)
 
-`find_latest_checkpoint()` mencari file `.pkl` terbaru di `checkpoints/` dan `interrupted/`, sorted by modification time.
-
----
-
-## 14. Hyperparameter Training
-
-### 14.1 Tabel Hyperparameter
-
-| Parameter | Nilai Default | Sumber | Pengaruh |
-|-----------|--------------|--------|----------|
-| `learning_rate` (α) | 0.1 | `.env` | Seberapa cepat Q-value berubah per update |
-| `discount_factor` (γ) | 0.95 | `.env` | Seberapa penting future reward dibanding immediate |
-| `epsilon_start` | 0.1 | `.env` | Probabilitas awal random exploration |
-| `epsilon_decay` | 0.99 | `.env` | Laju penurunan epsilon per step |
-| `epsilon_min` | 0.01 | `.env` | Batas bawah epsilon (selalu ada 1% eksplorasi) |
-| `episodes` | 10 | `.env` | Jumlah episode per training session |
-| `iteration` | 10 | `.env` | Jumlah step per episode |
-| `wait_time` | 60s | `.env` | Waktu tunggu setelah scaling |
-| `timeout` | 120s | `.env` | Timeout menunggu pod ready |
-| `metrics_interval` | 15s | `.env` | Window rate() di PromQL |
-| `metrics_quantile` | 0.90 | `.env` | Quantile untuk response time (P90) |
-
-### 14.2 Interaksi Antar Hyperparameter
-
-```
-episodes x iteration = total_steps per training session
-10 x 10 = 100 steps
-
-Setiap step ≈ 1-3 menit (scaling + wait_time + metrics collection)
-100 steps x ~2 menit = ~200 menit (~3.3 jam) per training session
-```
-
-```
-epsilon_decay^(total_steps) = epsilon akhir
-0.99^100 = 0.366 → masih banyak eksplorasi setelah 100 step
-0.99^1000 = 0.00004 → hampir full exploitation setelah 1000 step
-```
-
-### 14.3 Discount Factor (γ = 0.95)
-
-Pengaruh future reward terhadap keputusan saat ini:
-
-| Step di masa depan | Kontribusi ke Q-value | Kalkulasi |
-|--------------------|----------------------|-----------|
-| t+1 | 95% | 0.95^1 = 0.950 |
-| t+2 | 90.2% | 0.95^2 = 0.902 |
-| t+3 | 85.7% | 0.95^3 = 0.857 |
-| t+5 | 77.4% | 0.95^5 = 0.774 |
-| t+10 | 59.9% | 0.95^10 = 0.599 |
-
-γ = 0.95 berarti agent memperhitungkan masa depan secara signifikan — reward 10 step ke depan masih bernilai ~60% dari reward sekarang. Ini cocok untuk autoscaling karena keputusan scaling berdampak jangka panjang.
-
----
-
-## 15. Diagram Alur Training End-to-End
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                              train.py                                        │
-│                                                                              │
-│  1. Setup Logger                                                             │
-│  2. Koneksi InfluxDB                                                         │
-│  3. Inisialisasi Environment (KubernetesEnv)                                 │
-│  4. Inisialisasi Agent (QLearning / QLearningFuzzy)                          │
-│  5. Inisialisasi Trainer                                                     │
-│  6. trainer.train(episodes=N)                                                │
-└──────────────────────┬───────────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                         EPISODE LOOP (1..N)                                  │
-│                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────────┐  │
-│  │  env.reset()                                                           │  │
-│  │    ├── replica_state = min_replicas                                    │  │
-│  │    ├── Kubernetes API: scale deployment ke min                         │  │
-│  │    ├── Prometheus: wait_for_pods_ready()                               │  │
-│  │    ├── sleep(wait_time)                                                │  │
-│  │    ├── Prometheus: get_metrics(CPU, MEM, RT, RPS)                      │  │
-│  │    ├── Reset: action_history, rewards, counters                        │  │
-│  │    └── Return: observation (dict)                                      │  │
-│  └─────────────────────────────────────────────────────────────────────────┘  │
-│                       │                                                      │
-│                       ▼                                                      │
-│  ┌─────────────────────────────────────────────────────────────────────────┐  │
-│  │  ITERATION LOOP (1..M per episode)                                     │  │
-│  │                                                                         │  │
-│  │  ┌───────────────────────────────────────────────────────────────────┐  │  │
-│  │  │  STEP 1: agent.get_action(observation)                           │  │  │
-│  │  │    ├── Extract state_key:                                        │  │  │
-│  │  │    │   Q-Learning: (55.2, 62.1, 45.0, 62.5, "up", 45, "stable")│  │  │
-│  │  │    │   Q-Fuzzy:    ("medium","high","low","medium","up",...)     │  │  │
-│  │  │    ├── if state_key not in Q-table: Q[state] = zeros(100)       │  │  │
-│  │  │    ├── Epsilon-greedy:                                           │  │  │
-│  │  │    │   random < epsilon? → random action (0-99)                  │  │  │
-│  │  │    │   else            → argmax(Q[state])                        │  │  │
-│  │  │    └── Return: action (int 0-99)                                 │  │  │
-│  │  └───────────────────────────┬───────────────────────────────────────┘  │  │
-│  │                              │                                          │  │
-│  │                              ▼                                          │  │
-│  │  ┌───────────────────────────────────────────────────────────────────┐  │  │
-│  │  │  STEP 2: env.step(action)                                        │  │  │
-│  │  │    ├── Konversi action → replica count                           │  │  │
-│  │  │    │   percentage = action / 99                                   │  │  │
-│  │  │    │   replicas = round(min + percentage * range)                 │  │  │
-│  │  │    │                                                              │  │  │
-│  │  │    ├── _scale()                                                   │  │  │
-│  │  │    │   └── Kubernetes API: patch_deployment_scale(replicas)       │  │  │
-│  │  │    │                                                              │  │  │
-│  │  │    ├── wait_for_pods_ready()                                      │  │  │
-│  │  │    │   └── Prometheus: poll ready_replicas == desired (loop)      │  │  │
-│  │  │    │                                                              │  │  │
-│  │  │    ├── get_metrics()                                              │  │  │
-│  │  │    │   ├── sleep(wait_time)   ← metrik stabilization              │  │  │
-│  │  │    │   ├── CPU: rate(container_cpu_usage) / limits * 100          │  │  │
-│  │  │    │   ├── MEM: working_set_bytes / limits * 100                  │  │  │
-│  │  │    │   ├── RT:  histogram_quantile(0.90, latency_bucket)          │  │  │
-│  │  │    │   └── RPS: rate(app_requests_total)                          │  │  │
-│  │  │    │                                                              │  │  │
-│  │  │    ├── _calculate_reward()                                        │  │  │
-│  │  │    │   ├── Evaluate: optimal, balanced, wasteful, critical        │  │  │
-│  │  │    │   ├── Base reward = positive / (1 + negative)                │  │  │
-│  │  │    │   ├── Apply cost penalty                                     │  │  │
-│  │  │    │   ├── Apply trend modifiers                                  │  │  │
-│  │  │    │   └── Apply achievement bonuses                              │  │  │
-│  │  │    │                                                              │  │  │
-│  │  │    ├── Write to InfluxDB (all metrics + reward)                   │  │  │
-│  │  │    │                                                              │  │  │
-│  │  │    └── Return: (next_observation, reward, terminated, info)       │  │  │
-│  │  └───────────────────────────┬───────────────────────────────────────┘  │  │
-│  │                              │                                          │  │
-│  │                              ▼                                          │  │
-│  │  ┌───────────────────────────────────────────────────────────────────┐  │  │
-│  │  │  STEP 3: agent.update_q_table(obs, action, reward, next_obs)     │  │  │
-│  │  │    ├── state_key = get_state_key(obs)                            │  │  │
-│  │  │    ├── next_key  = get_state_key(next_obs)                       │  │  │
-│  │  │    ├── best_next = max(Q[next_key])                              │  │  │
-│  │  │    ├── Q[s,a] += α * (r + γ * best_next - Q[s,a])               │  │  │
-│  │  │    └── epsilon *= epsilon_decay                                   │  │  │
-│  │  └───────────────────────────┬───────────────────────────────────────┘  │  │
-│  │                              │                                          │  │
-│  │                              ▼                                          │  │
-│  │  ┌───────────────────────────────────────────────────────────────────┐  │  │
-│  │  │  STEP 4: Logging & Tracking                                      │  │  │
-│  │  │    ├── total_reward += reward                                     │  │  │
-│  │  │    ├── log_verbose_details() → visual bars, trends, Q-values     │  │  │
-│  │  │    └── obs = next_obs                                            │  │  │
-│  │  └───────────────────────────┬───────────────────────────────────────┘  │  │
-│  │                              │                                          │  │
-│  │                     terminated?                                         │  │
-│  │                    /          \                                          │  │
-│  │                  No            Yes                                       │  │
-│  │                  │              │                                        │  │
-│  │            Loop kembali    Keluar loop                                   │  │
-│  └─────────────────────────────────────────────────────────────────────────┘  │
-│                       │                                                      │
-│                       ▼                                                      │
-│  ┌─────────────────────────────────────────────────────────────────────────┐  │
-│  │  total_reward > best?                                                  │  │
-│  │    Yes → _save_checkpoint(episode, total_reward)                       │  │
-│  │    No  → lanjut episode berikutnya                                     │  │
-│  └─────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│  SETELAH TRAINING SELESAI                                                    │
-│    ├── Log Q-table summary (5 state pertama)                                 │
-│    ├── Simpan model final ke model/{type}/{timestamp}/final/                 │
-│    └── Log: "Model saved to: ..."                                            │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-# BAGIAN B: ALUR PREDICTION
-
-## 16. Inisialisasi Prediction
-
-Prediction dimulai dari `predict.py` (line 15–113). Berbeda dari training:
-
-### 16.1 Langkah-langkah Inisialisasi
-
-```python
-# 1-4: Sama seperti training (logger, influxdb, environment, agent)
-
-# 5. Load model yang sudah dilatih
+# 5. Load trained model
 model_path = os.getenv("MODEL_PATH", "")
-agent.load_model(model_path)    # Load Q-table dari file .pkl
+agent.load_model(model_path)
 
-# 6. KRITIS: Set epsilon = 0 (full exploitation, tanpa eksplorasi)
+# 6. CRITICAL: Set epsilon = 0 (no exploration)
 agent.epsilon = 0
 
 # 7. Reset environment
 obs = env.reset()
 ```
 
-### 16.2 Load Model
+### Model Loading
 
 ```python
 def load_model(self, filepath):
     with open(filepath, "rb") as f:
         model_data = pickle.load(f)
 
-    self.q_table = model_data["q_table"]       # Q-table terlatih
+    self.q_table = model_data["q_table"]
     self.learning_rate = model_data["learning_rate"]
     self.discount_factor = model_data["discount_factor"]
-    self.epsilon = model_data["epsilon"]         # Akan di-override ke 0
+    self.epsilon = model_data["epsilon"]    # will be overridden to 0
     self.n_actions = model_data["n_actions"]
     self.episodes_trained = model_data["episodes_trained"]
 ```
@@ -1135,192 +892,142 @@ def load_model(self, filepath):
 
 ## 17. Prediction Loop
 
-Loop prediction berjalan **tanpa batas** (infinite loop) — terus menerus mengontrol cluster (`predict.py:101-113`):
+The prediction loop runs **indefinitely** — continuously controlling the cluster:
 
 ```python
 while True:
-    act = agent.get_action(obs)                              # Selalu pilih best action
+    act = agent.get_action(obs)
     nxt, rew, term, info = env.step(act, q_table_size=len(agent.q_table))
     obs = nxt
     log_verbose_details(obs, agent, verbose=True, logger=logger)
 ```
 
-### Perbedaan Kritis dari Training
+### Critical Differences from Training
 
-1. **epsilon = 0** → Tidak ada eksplorasi random. Setiap aksi adalah `argmax(Q[state])` — aksi terbaik berdasarkan apa yang dipelajari
-2. **Tidak ada `update_q_table()`** → Q-table tidak berubah. Model bersifat read-only
-3. **Infinite loop** → Tidak ada konsep episode atau terminasi. Agent terus berjalan
-4. **Tidak ada checkpoint** → Model tidak disimpan ulang
+1. **epsilon = 0** → No random exploration. Every action is `argmax(Q[state])` — always the best known action.
+2. **No `update_q_table()`** → Q-table is read-only. The agent does not learn.
+3. **Infinite loop** → No episode concept or termination. The agent runs continuously.
+4. **No checkpoint saving** → Model is not saved again.
 
-### Alur Per Step di Prediction
+### Handling Unseen States
 
-```
-1. Observasi state saat ini
-   obs = {cpu: 65%, mem: 55%, rt: 40%, rps_norm: 70%, ...}
-
-2. Agent memilih aksi terbaik
-   state_key = get_state_key(obs)
-   action = argmax(Q[state_key])     # Misal: action = 54
-
-3. Environment mengeksekusi
-   replicas = round(1 + (54/99) * 11) = round(1 + 6.0) = 7
-   → Scale ke 7 pod
-   → Tunggu pod ready
-   → Tunggu metrik stabil
-   → Ambil metrik baru
-
-4. Terima observation baru
-   next_obs = {cpu: 50%, mem: 48%, rt: 35%, ...}
-
-5. Log metrik
-   ▶ Iter 05 | CPU 50.12% █████░░░░░ | MEM 48.33% ████░░░░░░ | ...
-
-6. Ulangi dari langkah 1 dengan next_obs
-```
-
-### Handling State Baru (Tidak Ada di Q-table)
-
-Saat prediction menemui state yang **belum pernah dilihat** saat training:
+When prediction encounters a state **not in the Q-table**:
 
 ```python
-def get_action(self, observation):
-    state_key = self.get_state_key(observation)
+if state_key not in self.q_table:
+    self.q_table[state_key] = np.zeros(self.n_actions)
 
-    if state_key not in self.q_table:
-        self.q_table[state_key] = np.zeros(100)  # Semua Q-value = 0
-
-    # epsilon = 0, jadi selalu ke sini:
-    action = np.argmax(self.q_table[state_key])  # argmax([0,0,...,0]) = 0
-    return action  # Action = 0 → min replicas
+# epsilon = 0, so always:
+action = int(np.argmax(self.q_table[state_key])) + 1
+# argmax([0, 0, ..., 0]) = 0 → +1 = 1 (minimum replicas)
 ```
 
-**Implikasi:** Jika Q-Fuzzy menemui state baru, agent default ke action 0 (minimum replicas). Ini bisa bermasalah jika state baru adalah kondisi critical. Namun karena Q-Fuzzy memiliki state space terbatas, kemungkinan state baru jauh lebih kecil dibanding Q-Learning kontinu.
+For an unseen state, the agent defaults to **action 1** (minimum replicas). This is conservative behavior — better to start at minimum than to over-provision on unknown states.
+
+For Q-Fuzzy, the state space is limited (81 combinations = 3^4), so unseen states during prediction are far less likely than in Q-Learning with continuous states.
 
 ---
 
-## 18. Perbedaan Training vs Prediction
+## 18. Training vs Prediction Differences
 
-| Aspek | Training | Prediction |
-|-------|---------|-----------|
-| **File** | `train.py` | `predict.py` |
-| **Epsilon** | 0.1 → decay → 0.01 | **0** (fixed) |
-| **Eksplorasi** | Ada (epsilon-greedy) | **Tidak ada** (pure exploitation) |
-| **Q-table update** | Setiap step (`update_q_table()`) | **Tidak pernah** |
-| **Loop** | Episode-based (terbatas) | **Infinite** (tanpa henti) |
-| **Terminasi** | Setelah N episode | Hanya manual (Ctrl+C) |
-| **Checkpoint** | Simpan best model | **Tidak ada** |
-| **InfluxDB** | Simpan semua metrik | Simpan semua metrik |
-| **Model** | Dibuat dari nol / resume | **Dimuat dari file** |
-| **Tujuan** | Belajar kebijakan optimal | **Menerapkan kebijakan** |
-| **reset()** | Setiap episode (scale ke min) | Sekali di awal saja |
+| Aspect              | Training                          | Prediction                      |
+| ------------------- | --------------------------------- | ------------------------------- |
+| **File**            | `train.py`                        | `predict.py`                    |
+| **Epsilon**         | 0.1 → decay → 0.01                | **0** (fixed)                   |
+| **Exploration**     | Yes (epsilon-greedy)              | **None** (pure exploitation)    |
+| **Q-table update**  | Every step (`update_q_table()`)   | **Never**                       |
+| **Loop**            | Episode-based (bounded)           | **Infinite**                    |
+| **Termination**     | After N episodes                  | Manual only (Ctrl+C)            |
+| **Checkpoint**      | Saves best model                  | **None**                        |
+| **InfluxDB**        | Writes all metrics                | Writes all metrics              |
+| **Model**           | Built from scratch or resumed     | **Loaded from file**            |
+| **Goal**            | Learn optimal policy              | **Apply learned policy**        |
+| **reset()**         | Every episode (scale to min)      | Once at startup only            |
 
 ---
 
-## 19. Diagram Alur Prediction End-to-End
+## 19. End-to-End Prediction Diagram
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                              predict.py                                      │
-│                                                                              │
-│  1. Setup Logger                                                             │
-│  2. Koneksi InfluxDB                                                         │
-│  3. Inisialisasi Environment (KubernetesEnv)                                 │
-│  4. Inisialisasi Agent (QLearning / QLearningFuzzy)                          │
-│  5. agent.load_model(MODEL_PATH)   ← Load Q-table terlatih                  │
-│  6. agent.epsilon = 0              ← KRITIS: tanpa eksplorasi               │
-│  7. obs = env.reset()              ← Scale ke min, ambil metrik awal        │
-└──────────────────────┬───────────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                       INFINITE LOOP                                          │
-│                                                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │  agent.get_action(obs)                                               │    │
-│  │    ├── state_key = get_state_key(obs)                                │    │
-│  │    ├── if new state: Q[state] = zeros(100) → action = 0 (default)   │    │
-│  │    └── action = argmax(Q[state_key])  ← SELALU best action          │    │
-│  └────────────────────────────┬─────────────────────────────────────────┘    │
-│                               │                                              │
-│                               ▼                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │  env.step(action)                                                    │    │
-│  │    ├── Konversi action → replica count                               │    │
-│  │    ├── Kubernetes API: scale deployment                              │    │
-│  │    ├── Prometheus: wait_for_pods_ready()                             │    │
-│  │    ├── sleep(wait_time)                                              │    │
-│  │    ├── Prometheus: get_metrics(CPU, MEM, RT, RPS)                    │    │
-│  │    ├── _calculate_reward()  ← dihitung tapi tidak dipakai update     │    │
-│  │    ├── Write to InfluxDB                                             │    │
-│  │    └── Return: (next_obs, reward, terminated, info)                  │    │
-│  └────────────────────────────┬─────────────────────────────────────────┘    │
-│                               │                                              │
-│                               ▼                                              │
-│  ┌──────────────────────────────────────────────────────────────────────┐    │
-│  │  obs = next_obs                                                      │    │
-│  │  log_verbose_details()  ← Visual monitoring                          │    │
-│  │                                                                       │    │
-│  │  TIDAK ADA:                                                           │    │
-│  │    ✗ update_q_table()                                                │    │
-│  │    ✗ epsilon decay                                                    │    │
-│  │    ✗ checkpoint saving                                                │    │
-│  └────────────────────────────┬─────────────────────────────────────────┘    │
-│                               │                                              │
-│                          Loop kembali                                        │
-│                          (selamanya)                                          │
-└──────────────────────────────────────────────────────────────────────────────┘
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                          predict.py                           │
+│  1. Setup Logger                                              │
+│  2. Connect InfluxDB                                          │
+│  3. Initialize Environment (KubernetesEnv)                    │
+│  4. Initialize Agent (QLearning / QLearningFuzzy)             │
+│  5. agent.load_model(MODEL_PATH)  ← Load trained Q-table     │
+│  6. agent.epsilon = 0             ← CRITICAL: no exploration  │
+│  7. obs = env.reset()             ← Scale to min, init obs   │
+└────────────────────────┬─────────────────────────────────────┘
+                         │
+                         ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     INFINITE LOOP                             │
+│                                                              │
+│  agent.get_action(obs)                                        │
+│    ├── state_key = get_state_key(obs) (4 components)          │
+│    ├── if new state: Q[state] = zeros → action = 1            │
+│    └── action = argmax(Q[state_key]) + 1 ← always best       │
+│                         │                                    │
+│  env.step(action)                                             │
+│    ├── K8s API: scale deployment                              │
+│    ├── Prometheus: wait_for_pods_ready()                      │
+│    ├── sleep(wait_time)                                       │
+│    ├── Prometheus: get_metrics(CPU, MEM, RT, RPS)             │
+│    ├── _calculate_reward()  ← computed but not used to learn  │
+│    ├── Write to InfluxDB                                      │
+│    └── Return: (next_obs, reward, terminated, info)           │
+│                         │                                    │
+│  obs = next_obs                                               │
+│  log_verbose_details()  ← monitoring output                   │
+│                                                              │
+│  NOT performed:                                               │
+│    ✗ update_q_table()                                         │
+│    ✗ epsilon decay                                            │
+│    ✗ checkpoint saving                                        │
+│                         │                                    │
+│                    loop forever                               │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-# BAGIAN C: REKOMENDASI JAWABAN SIDANG
+## PART C: THESIS DEFENSE Q&A
 
-### Q1: "Jelaskan alur training secara singkat"
+### Q1: "Describe the training flow briefly."
 
-> Training terdiri dari episode loop. Setiap episode dimulai dengan **reset** (scale ke minimum replica), lalu agent memilih aksi menggunakan **epsilon-greedy**, environment mengeksekusi aksi tersebut di **cluster Kubernetes nyata** (bukan simulasi), mengumpulkan metrik dari **Prometheus**, menghitung reward, lalu agent meng-update **Q-table** menggunakan Bellman equation. Proses ini berulang hingga iterasi habis. Model terbaik (total reward tertinggi per episode) disimpan sebagai checkpoint.
+> Training consists of an episode loop. Each episode starts with **reset** (scale to minimum replicas), then the agent selects an action using **epsilon-greedy**, the environment executes the action on the **real Kubernetes cluster** (not a simulation), collects metrics from **Prometheus**, calculates the reward, and the agent updates the **Q-table** using the Bellman equation. This repeats until the iteration count is exhausted. The best model (highest total reward per episode) is saved as a checkpoint.
 
-### Q2: "Kenapa action space 0-99? Bukan langsung jumlah replica?"
+### Q2: "Why is the action space directly the replica count (1..max\_replicas)?"
 
-> Action space 0–99 didesain sebagai **persentase dari rentang replica**. Ini memberikan **granularitas konsisten** terlepas dari konfigurasi min/max replicas. Jika kita menggunakan jumlah replica langsung (1–12), action space hanya 12 aksi. Dengan 100 aksi, agent bisa memilih jumlah replica secara lebih halus. Selain itu, persentase membuat model **portable** — Q-table yang dilatih dengan max_replicas=12 secara konseptual bisa digunakan pada konfigurasi berbeda, karena aksi diinterpretasikan secara relatif.
+> The action space is designed as the **direct replica count** (1 to max\_replicas). This is more intuitive and efficient: action=6 means deploy 6 pods with no conversion needed. With `n_actions = max_replicas` (e.g., 12), the Q-table per state only stores a small array (12 elements), and each action is visited more frequently, accelerating convergence. Compared to a percentage-based approach (100 actions), many percentage values would map to the same replica count — spreading Q-values across redundant actions and slowing learning.
 
-### Q3: "Kenapa environment menggunakan cluster nyata, bukan simulasi?"
+### Q3: "Why use a real cluster rather than a simulation?"
 
-> Pendekatan **online learning** di cluster nyata dipilih karena autoscaling sangat bergantung pada kondisi yang sulit disimulasikan: latensi jaringan, cold start pod, resource contention antar pod, perilaku garbage collector, caching effect, dan interaksi dengan load balancer. Simulasi akan memerlukan **modeling** yang sangat akurat untuk semua faktor ini, dan hasilnya belum tentu mentransfer ke cluster nyata (sim-to-real gap). Dengan belajar langsung di cluster, agent menangkap dinamika **end-to-end** yang sebenarnya.
+> Autoscaling depends heavily on real-world dynamics that are difficult to simulate accurately: network latency, pod cold-start time, resource contention between pods, JIT/cache warm-up effects, and load balancer behavior. A simulation would require very accurate modeling of all these factors, and the result may not transfer to a real cluster (sim-to-real gap). By learning directly on the cluster, the agent captures **end-to-end dynamics** as they actually occur.
 
-### Q4: "Apa keuntungan Q-Learning Fuzzy dibanding Q-Learning biasa?"
+### Q4: "What is the main advantage of Q-Learning Fuzzy over plain Q-Learning?"
 
-> Keuntungan utama adalah **reduksi state space** dan **generalisasi otomatis**. Q-Learning kontinu menghasilkan state key unik untuk setiap variasi kecil metrik — `CPU=55.2%` dan `CPU=55.3%` adalah state berbeda. Akibatnya, Q-table tumbuh besar tapi setiap state jarang dikunjungi ulang, memperlambat konvergensi. Q-Fuzzy memetakan range kontinu ke 5 label diskrit, sehingga `CPU=55.2%` dan `CPU=55.3%` sama-sama "medium" dan berbagi Q-value yang sama. Ini membuat pengalaman **digunakan ulang** secara efektif, mempercepat konvergensi dengan lebih sedikit data.
+> The main advantage is **state space reduction and automatic generalization**. In continuous Q-Learning, `CPU=55.2%` and `CPU=55.3%` are different states — the Q-table grows large but each state is rarely revisited. Q-Fuzzy maps both values to "medium", sharing Q-values. With 3 labels × 4 metrics, the theoretical state space is only 81 combinations (3^4), so experience is reused efficiently across similar situations, leading to faster convergence.
 
-### Q5: "Bagaimana agent menangani state yang belum pernah dilihat saat prediction?"
+### Q5: "How does the agent handle states not seen during training (at prediction time)?"
 
-> Saat prediction menemui state baru (tidak ada di Q-table), Q-value diinisialisasi ke **nol untuk semua aksi**. Karena `argmax([0, 0, ..., 0])` mengembalikan indeks 0, agent default ke action 0, yaitu **minimum replica**. Ini adalah perilaku konservatif — lebih baik di minimum (berisiko sedikit under-provisioned) daripada over-provisioning di state yang tidak dipahami. Untuk Q-Fuzzy, risiko ini jauh lebih kecil karena state space terbatas (~28.125 kombinasi), sehingga lebih banyak state sudah tercover saat training.
+> When prediction encounters a new state (not in the Q-table), Q-values are initialized to **zero for all actions**. Since `argmax([0, ..., 0])` returns index 0, this maps to action 1 (+1 from 0-based) — minimum replicas. This is conservative — defaulting to minimum rather than maximum avoids severe over-provisioning. For Q-Fuzzy, this risk is much smaller because the bounded state space (81 states) means most states were likely visited during training.
 
-### Q6: "Kenapa wait_time = 60 detik setelah scaling?"
+### Q6: "Why is wait\_time = 60 seconds after scaling?"
 
-> **Wait time** diperlukan karena ada **propagation delay** antara scaling dan metrik yang stabil. Saat pod baru dibuat, ia membutuhkan waktu untuk: (1) pull container image, (2) startup aplikasi, (3) warm up JIT/cache, (4) mulai menerima traffic dari load balancer, dan (5) metrik Prometheus ter-scrape dan terakumulasi cukup data. Jika kita mengambil metrik terlalu cepat, CPU/memory masih mencerminkan transient state (startup spike), bukan kondisi steady-state yang sebenarnya. 60 detik memberikan buffer yang cukup untuk stabilisasi.
+> **Wait time** is needed because of the **propagation delay** between scaling and stable metrics. When a new pod is created, it takes time to: (1) pull the container image, (2) start the application, (3) warm up JIT/caches, (4) begin receiving traffic from the load balancer, and (5) have enough data accumulated in Prometheus. Collecting metrics too soon captures a transient startup spike rather than the true steady-state. 60 seconds provides sufficient buffer for stabilization.
 
-### Q7: "Kenapa menggunakan P90 untuk response time, bukan rata-rata?"
+### Q7: "Why use P90 for response time rather than the mean?"
 
-> Rata-rata (mean) sensitif terhadap outlier dan bisa menyembunyikan masalah. Misalnya, jika 99 request selesai dalam 10ms tapi 1 request butuh 10.000ms, rata-rata = 109ms — terlihat buruk padahal mayoritas request baik. **P90 (persentil ke-90)** berarti "90% request selesai di bawah nilai ini" — lebih representatif terhadap pengalaman mayoritas user. Ini juga standar industri untuk **SLA monitoring**: Google, Amazon, dan perusahaan besar menggunakan P90/P95/P99 untuk mengukur performa layanan.
+> The mean is sensitive to outliers and can hide problems. If 99 requests complete in 10ms but 1 takes 10,000ms, the mean = 109ms — misleading since most users had a good experience. **P90 (90th percentile)** means "90% of requests complete below this value" — more representative of the typical user experience. It is also the industry standard for SLA monitoring (used by Google, Amazon, etc. to measure service performance).
 
-### Q8: "Apa perbedaan training dan prediction di level kode?"
+### Q8: "What are the limitations of this approach?"
 
-> Perbedaan fundamental ada di tiga hal:
-> 1. **Epsilon = 0**: Prediction tidak pernah melakukan aksi random. Setiap keputusan adalah yang terbaik menurut Q-table
-> 2. **Tidak ada `update_q_table()`**: Q-table bersifat frozen/read-only. Agent tidak belajar lagi
-> 3. **Infinite loop**: Tidak ada konsep episode atau terminasi — agent berjalan terus menerus mengontrol cluster
+> The main limitations are:
 >
-> Secara arsitektural, prediction adalah **deployment** dari model yang sudah dilatih, analog dengan serving di machine learning tradisional.
-
-### Q9: "Bagaimana sistem menangani interupsi saat training?"
-
-> Trainer memasang **signal handler** untuk SIGINT (Ctrl+C) dan SIGTERM. Saat sinyal diterima, handler secara otomatis menyimpan model ke direktori `interrupted/` sebelum proses berhenti. Model yang tersimpan mencakup seluruh Q-table, hyperparameter, dan jumlah episode yang sudah dilatih. Training bisa dilanjutkan (**resume**) dari checkpoint ini menggunakan flag `AUTO_RESUME=True` yang mencari file `.pkl` terbaru, atau `RESUME=True` dengan `RESUME_PATH` spesifik. Saat resume, epsilon bisa di-reset untuk memberikan eksplorasi tambahan pada knowledge yang sudah ada.
-
-### Q10: "Apa kelemahan pendekatan training ini?"
-
-> Beberapa kelemahan yang diakui:
-> 1. **Sample efficiency rendah**: Setiap step membutuhkan ~2 menit interaksi nyata, sehingga 1000 step = ~33 jam. Deep RL dengan replay buffer bisa lebih efisien, tapi Q-Learning tabular memerlukan banyak kunjungan per state
-> 2. **State space Q-Learning kontinu sangat besar**: State key menggunakan float kontinu, sehingga Q-table tumbuh cepat tapi jarang revisit state yang sama. Ini membuat konvergensi lambat
-> 3. **Tidak ada transfer learning**: Jika konfigurasi cluster berubah (pod resource limit, jenis workload), model harus dilatih ulang
-> 4. **Default action untuk state baru**: Prediction default ke minimum replicas untuk state yang tidak dikenali, yang bisa menyebabkan under-provisioning sementara
-> 5. **Bergantung pada kualitas metrik**: Jika Prometheus mengalami delay atau data gap, metrik yang dikumpulkan bisa misleading dan agent belajar dari sinyal yang salah
+> 1. **Low sample efficiency**: Each step takes ~2 minutes of real interaction, so 1000 steps ≈ 33 hours. Deep RL with replay buffers could be more efficient, but tabular Q-Learning requires many state visits.
+> 2. **Large state space for continuous Q-Learning**: Continuous state keys mean the Q-table grows fast but states are rarely revisited. Q-Fuzzy addresses this with its bounded state space (81 states, 3^4).
+> 3. **No transfer learning**: If the cluster configuration or workload type changes, the model must be retrained.
+> 4. **Default action for new states**: Prediction defaults to 1 replica (minimum) for unseen states, which may cause temporary under-provisioning.
+> 5. **Metric dependency**: If Prometheus has delays or data gaps, the agent learns from incorrect signals.

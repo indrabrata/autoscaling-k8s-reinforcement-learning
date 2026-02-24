@@ -382,7 +382,6 @@ def get_metrics(
     interval: int = 30,
     quantile: float = 0.90,
     endpoints_method: list[tuple[str, str]] = [("/", "GET"), ("/docs", "GET")],
-    increase: bool = False,
     logger: logging.Logger = logging.getLogger(__name__),
 ) -> tuple[float, float, float, float, int]:
     """
@@ -391,8 +390,7 @@ def get_metrics(
     Returns:
         tuple: (cpu_mean, mem_mean, response_time, request_rate, collected_pods)
     """
-    if increase or wait_time > 0:
-        time.sleep(wait_time)
+    time.sleep(wait_time)
 
     start = time.time()
     while time.time() - start < timeout:

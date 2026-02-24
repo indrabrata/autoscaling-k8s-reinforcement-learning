@@ -8,26 +8,26 @@ export const options = {
       exec: "cpuTest",
       startVUs: 0,
       stages: [
-        { duration: "1m", target: 10 },
-        { duration: "1m", target: 50 },
-        { duration: "1m", target: 100 },
-        { duration: "1m", target: 70 },
-        { duration: "1m", target: 30 },
+        { duration: "6m", target: 10 },
+        { duration: "6m", target: 40 },
+        { duration: "6m", target: 75 },
+        { duration: "6m", target: 30 },
+        { duration: "6m", target: 5 },
       ],
-      gracefulRampDown: "10s",
+      gracefulRampDown: "30s",
     },
     memory_stress: {
       executor: "ramping-vus",
       exec: "memoryTest",
       startVUs: 0,
       stages: [
-        { duration: "1m", target: 10 },
-        { duration: "1m", target: 50 },
-        { duration: "1m", target: 100 },
-        { duration: "1m", target: 70 },
-        { duration: "1m", target: 30 },
+        { duration: "6m", target: 10 },
+        { duration: "6m", target: 40 },
+        { duration: "6m", target: 75 },
+        { duration: "6m", target: 30 },
+        { duration: "6m", target: 5 },
       ],
-      gracefulRampDown: "10s",
+      gracefulRampDown: "30s",
     },
   },
   thresholds: {
@@ -37,22 +37,28 @@ export const options = {
 
 const BASE_URL = "http://10.34.4.150:30080/api/qfuzzy";
 
+console.log("BASE_URL: ", BASE_URL);
+
 export function cpuTest() {
   const url = `${BASE_URL}/cpu?iterations=200`;
   const res = http.post(url);
+
   check(res, {
     "CPU: status 200": (r) => r.status === 200,
     "CPU: body not empty": (r) => r.body && r.body.length > 0,
   });
+
   sleep(1);
 }
 
 export function memoryTest() {
-  const url = `${BASE_URL}/memory?size=3000&heavy_agg=true`;
+  const url = `${BASE_URL}/memory?size=2000&heavy_agg=true`;
   const res = http.post(url);
+
   check(res, {
     "Memory: status 200": (r) => r.status === 200,
     "Memory: body not empty": (r) => r.body && r.body.length > 0,
   });
+
   sleep(1);
 }

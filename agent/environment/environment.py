@@ -18,6 +18,7 @@ class KubernetesEnv:
         self,
         min_replicas: int = 1,
         max_replicas: int = 50,
+        total_episode: int = 30,
         iteration: int = 100,
         namespace: str = "default",
         deployment_name: str = "default",
@@ -39,7 +40,6 @@ class KubernetesEnv:
         metrics_interval: int = 15,
         metrics_quantile: float = 0.90,
         max_scaling_retries: int = 1000,
-        request_rate_per_pod_capacity: float = 80.0,
         algorithm: str = "Q",
     ) -> None:
         self.logger = logger or logging.getLogger(__name__)
@@ -50,6 +50,7 @@ class KubernetesEnv:
         self.min_replicas = min_replicas
         self.max_replicas = max_replicas
         self.range_replicas = max(1, self.max_replicas - self.min_replicas)
+        self.total_episode=total_episode
         self.iteration = iteration
         self.initial_iteration = iteration
         self.namespace = namespace
@@ -62,7 +63,7 @@ class KubernetesEnv:
         self.verbose = verbose
         self.timeout = timeout
         self.wait_time = wait_time
-        self.last_action = 0
+        self.last_replica = self.min_replicas
         self.influxdb = influxdb
         self.prometheus = PrometheusConnect(
             url=prometheus_url,
@@ -73,28 +74,9 @@ class KubernetesEnv:
         self.metrics_quantile = metrics_quantile
         self.max_scaling_retries = max_scaling_retries
 
-        self.action_space = list(range(100))
-        self.response_time_weight = 1.0
-        self.cpu_memory_weight = 0.5
-        self.cost_weight = 0.3
+        self.action_space = list(range(1, self.max_replicas + 1))
 
         self.algorithm = algorithm
-
-        # This value should be determined through load testing on a single pod
-        # See: k6 capacity test script for finding this value
-        self.per_pod_capacity = (
-            request_rate_per_pod_capacity  # requests per second that one pod can handle
-        )
-
-        # Initialize state tracking variables
-        self.request_rate = 0.0
-        self.previous_request_rate = 0.0
-        self.request_rate_trend = 0.0
-        self.action_change = 0
-
-        # Used to detect scaling patterns (increasing, decreasing, stable, oscillating)
-        self.action_history = []
-        self.action_trend_window = 5  # Number of previous actions to consider for trend
 
         # Track cumulative reward for sample efficiency analysis
         self.cumulative_reward = 0.0
@@ -104,7 +86,7 @@ class KubernetesEnv:
         )
 
         if self.algorithm == "Q-LEARNING-FUZZY":
-            self.fuzzy = Fuzzy(logger=logger)
+            self.fuzzy = Fuzzy(logger=logger, max_replicas=self.max_replicas)
         else:
             self.fuzzy = None
 
@@ -118,7 +100,8 @@ class KubernetesEnv:
 
         self.logger.info("📊 TRAINING PARAMETERS:")
         self.logger.info(f"  Algorithm:              {self.algorithm}")
-        self.logger.info(f"  Episodes:               {self.iteration}")
+        self.logger.info(f"  Episodes:               {self.total_episode}")
+        self.logger.info(f"  Iteration:              {self.iteration}")
         self.logger.info(f"  Namespace:              {self.namespace}")
         self.logger.info(f"  Deployment:             {self.deployment_name}")
 
@@ -129,16 +112,11 @@ class KubernetesEnv:
         self.logger.info(f"  Replica Range:          {self.range_replicas}")
 
         self.logger.info("")
-        self.logger.info("📈 RESOURCE THRESHOLDS:")
-        self.logger.info(f"  Min CPU:                {self.min_cpu}%")
-        self.logger.info(f"  Max CPU:                {self.max_cpu}%")
-        self.logger.info(f"  Min Memory:             {self.min_memory}%")
-        self.logger.info(f"  Max Memory:             {self.max_memory}%")
-        self.logger.info(f"  Max Response Time:      {self.max_response_time}ms")
+        self.logger.info("📈 SLO THRESHOLD:")
+        self.logger.info(f"  Max Response Time (SLO): {self.max_response_time}ms")
 
         self.logger.info("")
-        self.logger.info("🚦 CAPACITY & LOAD:")
-        self.logger.info(f"  Request Rate Per Pod:   {self.per_pod_capacity} RPS")
+        self.logger.info("🚦 METRICS:")
         self.logger.info(f"  Metrics Interval:       {self.metrics_interval}s")
         self.logger.info(
             f"  Response Time Quantile: P{int(self.metrics_quantile * 100)}"
@@ -150,62 +128,7 @@ class KubernetesEnv:
         self.logger.info(f"  Wait Time:              {self.wait_time}s")
         self.logger.info(f"  Max Scaling Retries:    {self.max_scaling_retries}")
 
-        self.logger.info("")
-        self.logger.info("🔍 REWARD CALCULATION FORMULA:")
-        self.logger.info("  For Optimal State (CPU/MEM in range, RT good, RPS good):")
-        self.logger.info(
-            "    → Positive contribution: optimal_score * 1.0 + balanced_score * 0.7"
-        )
-        self.logger.info("  ")
-        self.logger.info("  For Wasteful State (CPU/MEM < min, over-provisioned):")
-        self.logger.info(
-            f"    → Wasteful penalty: wasteful_score * {self.cost_weight} * 1.5"
-        )
-        self.logger.info("  ")
-        self.logger.info(
-            "  For Critical State (CPU/MEM > max, RT high, RPS saturating):"
-        )
-        self.logger.info(
-            f"    → Critical penalty: critical_score * ({self.response_time_weight} + {self.cpu_memory_weight})"
-        )
-        self.logger.info("  ")
-        self.logger.info("  Final Reward:")
-        self.logger.info(
-            "    reward = positive_contribution / (1 + negative_contribution)"
-        )
-        self.logger.info("    reward -= cost_penalty (based on replica ratio)")
-        self.logger.info("    reward += proactive/reactive bonuses (trend-based)")
-        self.logger.info("    ⚠️  NO CLAMPING - rewards can be negative!")
-
-        self.logger.info("")
-        self.logger.info("💡 CAPACITY CALCULATION EXAMPLES:")
-        for replicas in [1, 3, 5, 10]:
-            capacity = self.per_pod_capacity * replicas
-            self.logger.info(f"  {replicas} pod(s):  {capacity:.0f} RPS capacity")
-            # Example normalized values
-            for rps in [25, 50, 100]:
-                if rps <= capacity:
-                    normalized = (rps / capacity) * 100
-                    self.logger.info(
-                        f"    └─ {rps} RPS → {normalized:.1f}% utilization"
-                    )
-
-        self.logger.info("")
-        self.logger.info("⚠️  CRITICAL THRESHOLDS:")
-        self.logger.info(
-            f"  Wasteful Trigger:  CPU < {self.min_cpu}% OR Memory < {self.min_memory}%"
-        )
-        self.logger.info(
-            f"  Critical Trigger:  CPU > {self.max_cpu}% OR Memory > {self.max_memory}%"
-        )
-        self.logger.info(f"  RPS Saturating:    Request Rate Normalized > 90%")
-        self.logger.info(
-            f"  RT Critical:       Response Time > 100% of {self.max_response_time}ms"
-        )
-
-        self.logger.info("=" * 100)
         self.logger.info("Environment initialized successfully!")
-        self.logger.info("=" * 100)
 
     def _scale(self) -> None:
         HTTP_INTERNAL_SERVER_ERROR = 500
@@ -218,7 +141,7 @@ class KubernetesEnv:
         attempt = 0
 
         self.logger.info(
-            f"Scaling to {self.replica_state} replicas | action {self.last_action}%"
+            f"Scaling to {self.replica_state} replicas | last_replica {self.last_replica}"
         )
 
         while attempt < self.max_scaling_retries:
@@ -292,350 +215,111 @@ class KubernetesEnv:
         )
 
     def _calculate_reward_qlearning(self) -> Tuple[float, Dict[str, Union[float, str]]]:
-        """
-        UNIFIED REWARD FUNCTION - Used by BOTH Q-Learning and Q-Fuzzy
+            """
+            UNIFIED REWARD FUNCTION - Used by BOTH Q-Learning and Q-Fuzzy
 
-        This reward function evaluates the quality of the current state by considering:
-        1. Resource utilization (CPU, Memory)
-        2. Response time performance
-        3. Request rate handling
-        4. Cost efficiency (replica count)
-        5. Proactive/reactive scaling behavior
+            Reward formula:
+                R_total = R_rt - R_cost
 
-        IMPORTANT: Both algorithms use this SAME reward function!
-        - Q-Learning: Evaluates reward for raw continuous states
-        - Q-Fuzzy: Evaluates reward for fuzzified states
+            Components:
+            1. R_rt   = 1 - (rt / rt_max)  — SLO compliance reward
+            2. R_cost = (R - R_min) / (R_max - R_min) — Replica cost penalty
 
-        The difference is NOT in the reward calculation, but in STATE REPRESENTATION:
-        - Q-Learning state: (cpu=45.5%, mem=60.2%, rt=800ms, ...)
-        - Q-Fuzzy state: (cpu=medium, mem=high, rt=medium, ...)
+            Design principles:
+            - R_rt: Positive when response time is below SLO, negative when above.
+                    Provides continuous gradient — agent always incentivized to minimize RT.
+            - R_cost: 0.0 at min replicas (cheapest), 1.0 at max replicas (most expensive).
+                    Subtracted from R_rt to penalize over-provisioning.
+            - No weights needed: both components naturally operate in comparable ranges.
+            - No edge-case overrides: formula handles boundaries naturally
+            (R_cost = 0 at R_min, so only R_rt drives reward).
 
-        This ensures fair comparison where the ONLY variable is state abstraction.
+            Reference:
+            - SLO preservation ratio inspired by Qiu et al. (USENIX OSDI, 2020)
+            - Inverse replica normalization based on Zhong (UvA, 2023)
+            - Scalarized multi-objective RL normalization per Rossi et al. (IEEE CLOUD, 2019)
 
-        Returns:
-            tuple: (reward, breakdown_dict)
-                - reward: float, can be negative (no clamping)
-                - breakdown: dict with detailed reward components
-        """
-        if (
-            self.response_time is None
-            or math.isnan(self.response_time)
-            or math.isinf(self.response_time)
-        ):
-            self.response_time = 0.0
+            Returns:
+                tuple: (reward, breakdown_dict)
+            """
+            if (
+                self.response_time is None
+                or math.isnan(self.response_time)
+                or math.isinf(self.response_time)
+            ):
+                self.response_time = 0.0
 
-        response_time_percentage: float = (
-            self.response_time / self.max_response_time
-        ) * 100.0
-        replica_ratio: float = (
-            self.replica_state - self.min_replicas
-        ) / self.range_replicas
+            # ========================================================================================================
+            # COMPONENT 1: RESPONSE TIME REWARD (R_rt)
+            # ========================================================================================================
+            # R_rt = 1 - (rt / rt_max)
+            #
+            # Measures SLO compliance. The value 1 is the maximum reward, normalized so
+            # that R_rt operates in the same scale as R_cost.
+            #
+            # - rt = 0ms      → R_rt = +1.0  (best possible response time)
+            # - rt = rt_max    → R_rt =  0.0  (exactly at SLO threshold)
+            # - rt = 2×rt_max  → R_rt = -1.0  (SLO violated, strong penalty)
+            #
+            # Continuous gradient ensures agent always has incentive to minimize
+            # response time, avoiding zero-gradient dead zones.
+            # ========================================================================================================
+            r_rt: float = 1.0 - (self.response_time / self.max_response_time)
 
-        current_capacity: float = self.per_pod_capacity * self.replica_state
-        request_rate_normalized: float = min(
-            100.0, (self.request_rate / current_capacity) * 100.0
-        )
+            # ========================================================================================================
+            # COMPONENT 2: REPLICA COST PENALTY (R_cost)
+            # ========================================================================================================
+            # R_cost = (R - R_min) / (R_max - R_min)
+            #
+            # Measures operational cost based on replica count.
+            #
+            # - R = R_min  → R_cost = 0.0  (most efficient, no cost penalty)
+            # - R = R_max  → R_cost = 1.0  (most expensive, maximum cost penalty)
+            #
+            # At R_min, cost is zero — agent is not penalized for something it
+            # cannot reduce further. This provides natural boundary handling
+            # without explicit edge-case overrides.
+            # ========================================================================================================
+            r_cost: float = (
+                self.replica_state - self.min_replicas
+            ) / self.range_replicas
 
-        observation: dict = self._get_observation()
-        request_trend: str = observation.get("request_rate_trend_category", "stable")
-        action_trend: str = observation.get("action_trend_category", "stable")
+            # ========================================================================================================
+            # TOTAL REWARD
+            # ========================================================================================================
+            # R_total = R_rt - R_cost
+            #
+            # No weights needed — both components are normalized to comparable ranges:
+            #   R_rt   ∈ (-∞, +1.0]  (typically [-1.0, +1.0] under normal conditions)
+            #   R_cost ∈ [0.0, +1.0]
+            #
+            # Best case:  low RT + low replicas  → R_rt ≈ +1.0, R_cost ≈ 0.0 → R ≈ +1.0
+            # Worst case: high RT + max replicas → R_rt < 0.0,  R_cost = 1.0 → R << 0.0
+            # ========================================================================================================
+            reward: float = r_rt - r_cost
 
-        # OPTIMAL STATE: Resources well-utilized, response time excellent, request rate handled well
-        # CPU/MEM in target range, response time low, request rate not saturating
-        cpu_in_range = self.min_cpu <= self.cpu_usage <= self.max_cpu
-        mem_in_range = self.min_memory <= self.memory_usage <= self.max_memory
-        resp_excellent = response_time_percentage <= 60.0  # < 60% of max
-        resp_good = response_time_percentage <= 80.0  # < 80% of max
-        req_rate_good = request_rate_normalized <= 70.0  # Not saturating capacity
 
-        if cpu_in_range and mem_in_range and resp_excellent and req_rate_good:
-            optimal_score = 1.0
-        elif cpu_in_range and mem_in_range and resp_good and req_rate_good:
-            optimal_score = 0.8
-        elif cpu_in_range and mem_in_range and resp_good:
-            optimal_score = 0.7
-        elif (
-            (self.min_cpu <= self.cpu_usage <= self.max_cpu * 1.1)
-            and (self.min_memory <= self.memory_usage <= self.max_memory * 1.1)
-            and resp_good
-        ):
-            optimal_score = 0.5
-        else:
-            optimal_score = 0.0
-
-        # BALANCED STATE: Stable and efficient operation
-        # Metrics moderate, response time acceptable, request rate sustainable
-        cpu_moderate = 40 <= self.cpu_usage <= 70
-        mem_moderate = 40 <= self.memory_usage <= 70
-        resp_acceptable = response_time_percentage <= 90.0
-        req_rate_sustainable = request_rate_normalized <= 80.0
-
-        if cpu_moderate and mem_moderate and resp_good and req_rate_sustainable:
-            balanced_score = 1.0
-        elif cpu_moderate and mem_moderate and resp_acceptable:
-            balanced_score = 0.7
-        elif (
-            (30 <= self.cpu_usage <= 80)
-            and (30 <= self.memory_usage <= 80)
-            and resp_acceptable
-        ):
-            balanced_score = 0.5
-        else:
-            balanced_score = 0.0
-
-        # WASTEFUL STATE: Over-provisioned, resources under-utilized
-        # CPU/MEM very low, response time low, request rate very low = wasting resources
-        cpu_very_low = self.cpu_usage < self.min_cpu * 0.5
-        mem_very_low = self.memory_usage < self.min_memory * 0.5
-        cpu_low = self.cpu_usage < self.min_cpu
-        mem_low = self.memory_usage < self.min_memory
-        req_rate_very_low = request_rate_normalized < 30.0
-
-        if cpu_very_low and mem_very_low and resp_excellent and req_rate_very_low:
-            wasteful_score = 1.0  # Severe waste: all metrics very low
-        elif (cpu_very_low or mem_very_low) and resp_excellent and req_rate_very_low:
-            wasteful_score = 0.9
-        elif cpu_low and mem_low and resp_good and request_rate_normalized < 50.0:
-            wasteful_score = 0.7
-        elif (cpu_low or mem_low) and resp_excellent:
-            wasteful_score = 0.5
-        else:
-            wasteful_score = 0.0
-
-        # ========================================================================================================
-        # WAIVE WASTEFUL PENALTY AT MIN_REPLICAS
-        # ========================================================================================================
-        # Problem: At minimum replicas with low load, system gets wasteful penalty but cannot scale down
-        # Solution: Waive wasteful penalty when at MIN_REPLICAS to avoid unfair negative rewards
-        # Rationale: Agent cannot improve this state (already at minimum), so don't penalize
-        # ========================================================================================================
-
-        if wasteful_score > 0 and self.replica_state <= self.min_replicas:
-            original_wasteful = wasteful_score
-            wasteful_score = 0.0
-            self.logger.debug(
-                f"Wasteful penalty waived: at MIN_REPLICAS "
-                f"(current={self.replica_state}, min={self.min_replicas}, "
-                f"original_wasteful={original_wasteful:.2f})"
+            self.logger.info(
+                f"[REWARD] Iter={getattr(self, 'iteration', '?')} | "
+                f"Replicas={self.replica_state} | "
+                f"Reward={reward:.4f}"
+            )
+            self.logger.info(
+                f"  Components: R_rt={r_rt:.4f} R_cost={r_cost:.4f} | "
+                f"RT={self.response_time:.1f}ms "
+                f"({self.response_time / self.max_response_time * 100:.1f}% of SLO)"
             )
 
-        # Response time very high, CPU/MEM maxed out, or request rate saturating
-        cpu_very_high = self.cpu_usage > self.max_cpu * 1.1
-        mem_very_high = self.memory_usage > self.max_memory * 1.1
-        cpu_high = self.cpu_usage > self.max_cpu
-        mem_high = self.memory_usage > self.max_memory
-        resp_critical = response_time_percentage > 120.0
-        resp_high = response_time_percentage > 100.0
-        req_rate_saturating = request_rate_normalized > 90.0  # Near capacity limit
+ 
+            return reward, {
+                "reward": reward,
+                "r_rt": r_rt,
+                "r_cost": r_cost,
+                "response_time_ms": self.response_time,
+                "response_time_percentage": self.response_time / self.max_response_time * 100.0,
+                "replica_count": self.replica_state,
+            }
 
-        if resp_critical or req_rate_saturating:
-            critical_score = 1.0  # Very critical
-        elif (cpu_very_high or mem_very_high) and resp_high:
-            critical_score = 1.0
-        elif resp_high and (cpu_high or mem_high):
-            critical_score = 0.9
-        elif request_rate_normalized > 85.0 and (cpu_high or mem_high):
-            critical_score = 0.8  # High request rate with high resources
-        elif cpu_very_high or mem_very_high:
-            critical_score = 0.7
-        elif resp_high:
-            critical_score = 0.6
-        else:
-            critical_score = 0.0
-
-        # Calculate reward based on state quality
-        optimal_contribution = optimal_score * 1.0
-        balanced_contribution = balanced_score * 0.7
-        wasteful_penalty = wasteful_score * self.cost_weight * 1.5
-        critical_penalty = critical_score * (
-            self.response_time_weight + self.cpu_memory_weight
-        )
-
-        positive_contribution = optimal_contribution + balanced_contribution
-        negative_contribution = wasteful_penalty + critical_penalty
-
-        # ========================================================================================================
-        # NEUTRAL STATE BASELINE REWARD
-        # ========================================================================================================
-        # Problem: Many states fall between categories (not optimal, not balanced, not wasteful, not critical)
-        # Solution: Give small baseline reward for "acceptable" states to reduce sparse rewards
-        # This creates a smoother gradient: bad → neutral → acceptable → good → optimal
-        # ========================================================================================================
-
-        if positive_contribution == 0.0 and negative_contribution == 0.0:
-            at_min_replicas = self.replica_state <= self.min_replicas
-
-            if at_min_replicas and resp_good:
-                # At min replicas with low load and good response time — this is correct behavior
-                # The agent cannot scale down further, so reward it for being at the floor
-                neutral_baseline = 0.3
-                positive_contribution = neutral_baseline
-
-                self.logger.debug(
-                    f"Min replicas baseline: CPU={self.cpu_usage:.1f}%, "
-                    f"MEM={self.memory_usage:.1f}%, RT={response_time_percentage:.1f}%, "
-                    f"Replicas={self.replica_state}/{self.min_replicas} → baseline reward={neutral_baseline}"
-                )
-            else:
-                # State doesn't fit any category - check if it's at least "acceptable"
-                cpu_acceptable = 20 <= self.cpu_usage <= 80
-                mem_acceptable = 20 <= self.memory_usage <= 80
-                resp_acceptable = response_time_percentage <= 100.0
-                req_acceptable = request_rate_normalized <= 85.0
-
-                if (
-                    cpu_acceptable
-                    and mem_acceptable
-                    and resp_acceptable
-                    and req_acceptable
-                ):
-                    # Give small baseline reward for acceptable (but not optimal) state
-                    neutral_baseline = 0.2
-                    positive_contribution = neutral_baseline
-
-                    self.logger.debug(
-                        f"Neutral state detected: CPU={self.cpu_usage:.1f}%, "
-                        f"MEM={self.memory_usage:.1f}%, RT={response_time_percentage:.1f}%, "
-                        f"RPS={request_rate_normalized:.1f}% → baseline reward={neutral_baseline}"
-                    )
-
-        # Base reward formula
-        if negative_contribution > 0:
-            reward = positive_contribution / (1.0 + negative_contribution)
-        else:
-            reward = positive_contribution
-
-        # Additional cost penalty based on replica ratio and state
-        # Penalize high replicas in wasteful state more
-        if wasteful_score > 0.5 and replica_ratio > 0.6:
-            cost_factor = 1.8
-            cost_pen = self.cost_weight * cost_factor * replica_ratio
-            reward -= cost_pen * 0.3
-        # Reduce penalty for high replicas if system is critical
-        elif critical_score > 0.5 and replica_ratio > 0.5:
-            cost_factor = 0.2
-            cost_pen = self.cost_weight * cost_factor * replica_ratio
-            reward -= cost_pen * 0.1
-        else:
-            cost_factor = 1.0
-            cost_pen = self.cost_weight * cost_factor * replica_ratio * 0.2
-            reward -= cost_pen
-
-        # CRITICAL: Trend-based bonuses and penalties
-
-        # Proactive scaling bonus: reward scaling up when request rate is trending up
-        proactive_bonus = 0.0
-        if request_trend == "up" and action_trend == "up":
-            proactive_bonus = 0.04  # Good: scaling up proactively
-        elif request_trend == "down" and action_trend == "down":
-            proactive_bonus = 0.03  # Good: scaling down when load decreasing
-
-        # Reactive penalty: penalize late response to trends
-        reactive_penalty = 0.0
-        if (
-            request_trend == "up"
-            and request_rate_normalized > 75.0
-            and action_trend == "stable"
-        ):
-            reactive_penalty = 0.05  # Bad: not scaling when should
-        elif (
-            request_trend == "up"
-            and request_rate_normalized > 75.0
-            and action_trend == "down"
-        ):
-            reactive_penalty = 0.08  # Very bad: scaling down when load increasing
-
-        # Oscillation penalty: penalize unstable action patterns
-        oscillation_penalty = 0.0
-        if action_trend == "stable" and balanced_score < 0.3 and critical_score > 0.5:
-            oscillation_penalty = 0.02  # Bad: not taking action when needed
-
-        # Request rate handling bonus
-        req_rate_bonus = 0.0
-        if 40.0 <= request_rate_normalized <= 70.0 and request_trend == "stable":
-            req_rate_bonus = 0.04  # Sweet spot: good utilization, stable load
-
-        # Apply trend modifiers
-        reward += proactive_bonus
-        reward -= reactive_penalty
-        reward -= oscillation_penalty
-        reward += req_rate_bonus
-
-        # Bonus for achieving optimal state with efficient replica usage
-        if optimal_score > 0.6 and 0.3 <= replica_ratio <= 0.7:
-            reward += 0.05
-
-        # Bonus for stable balanced state
-        if balanced_score > 0.7:
-            reward += 0.03
-
-        # NOTE: No clamping - preserve actual reward values including:
-        # - Very small positive values (e.g., 0.0000001)
-        # - Negative values (important learning signal for bad states)
-        # - Values > 1.0 (rare but possible for exceptional performance)
-
-        # Calculate individual penalties for logging
-        if self.cpu_usage < self.min_cpu:
-            cpu_pen = (self.min_cpu - self.cpu_usage) / self.min_cpu
-        elif self.cpu_usage > self.max_cpu:
-            cpu_pen = (self.cpu_usage - self.max_cpu) / (100 - self.max_cpu)
-        else:
-            cpu_pen = 0.0
-
-        if self.memory_usage < self.min_memory:
-            mem_pen = (self.min_memory - self.memory_usage) / self.min_memory
-        elif self.memory_usage > self.max_memory:
-            mem_pen = (self.memory_usage - self.max_memory) / (100 - self.max_memory)
-        else:
-            mem_pen = 0.0
-
-        if response_time_percentage <= 100.0:
-            resp_pen = 0.0
-        else:
-            resp_pen = min(1.0, (response_time_percentage - 100.0) / 100.0)
-
-        cpu_mem_pen = self.cpu_memory_weight * (cpu_pen + mem_pen)
-        total_penalty = negative_contribution
-
-        # CRITICAL: Concise reward logging on 3 lines
-        self.logger.info(
-            f"[Q-LEARNING] Iter={getattr(self, 'iteration', '?')} | Replicas={self.replica_state} | "
-            f"Reward={reward:.4f} | State(O={optimal_score:.2f} B={balanced_score:.2f} W={wasteful_score:.2f} C={critical_score:.2f})"
-        )
-        self.logger.info(
-            f"  Metrics: CPU={self.cpu_usage:.1f}% MEM={self.memory_usage:.1f}% RT={response_time_percentage:.1f}% "
-            f"ReqRate={self.request_rate:.1f}rps({request_rate_normalized:.1f}%) | Trends: Req={request_trend.upper()} Act={action_trend.upper()}"
-        )
-        self.logger.info(
-            f"  Modifiers: Proactive={proactive_bonus:.3f} Reactive=-{reactive_penalty:.3f} ReqBonus={req_rate_bonus:.3f} "
-            f"Oscillation=-{oscillation_penalty:.3f} Cost=-{cost_pen:.3f}"
-        )
-
-        return reward, {
-            "reward": reward,
-            "cpu_penalty": cpu_pen,
-            "memory_penalty": mem_pen,
-            "response_time_penalty": resp_pen,
-            "cpu_memory_penalty": cpu_mem_pen,
-            "cost_penalty": cost_pen,
-            "cost_factor": cost_factor,
-            "total_penalty": total_penalty,
-            "replica_ratio": replica_ratio,
-            "response_time_percentage": response_time_percentage,
-            "request_rate_normalized": request_rate_normalized,
-            "request_trend": request_trend,
-            "action_trend": action_trend,
-            "proactive_bonus": proactive_bonus,
-            "reactive_penalty": reactive_penalty,
-            "oscillation_penalty": oscillation_penalty,
-            "req_rate_bonus": req_rate_bonus,
-            "optimal": optimal_score,
-            "balanced": balanced_score,
-            "wasteful": wasteful_score,
-            "critical": critical_score,
-            "positive_contribution": positive_contribution,
-            "negative_contribution": negative_contribution,
-        }
 
     def _calculate_reward(self) -> Tuple[float, Dict[str, Union[float, str]]]:
         """
@@ -653,7 +337,6 @@ class KubernetesEnv:
 
     def _scale_and_get_metrics(self) -> None:
         self._scale()
-        increase: int = self.replica_state > self.replica_state_old
         ready, desired_replicas, ready_replicas = wait_for_pods_ready(
             prometheus=self.prometheus,
             deployment_name=self.deployment_name,
@@ -666,7 +349,7 @@ class KubernetesEnv:
             self.cpu_usage,
             self.memory_usage,
             self.response_time,
-            self.request_rate,
+            _,  # request_rate (not used in reward/state)
             self.replica,
         ) = get_metrics(
             replicas=ready_replicas,
@@ -678,7 +361,6 @@ class KubernetesEnv:
             interval=self.metrics_interval,
             quantile=self.metrics_quantile,
             endpoints_method=self.metrics_endpoints_method,
-            increase=increase,
             logger=self.logger,
         )
 
@@ -687,86 +369,19 @@ class KubernetesEnv:
                 f"Pods are not ready, {ready_replicas}/{desired_replicas} ready"
             )
 
-    def _categorize_request_rate_trend(self) -> str:
-        """
-        Converts continuous trend values into categorical state: up, down, stable.
-
-        Returns:
-            str: 'up', 'down', or 'stable'
-        """
-        if self.request_rate_trend > 5.0:
-            return "up"
-        elif self.request_rate_trend < -5.0:
-            return "down"
-        else:
-            return "stable"
-
-    def _calculate_action_trend_value(self) -> float:
-        """
-        Positive value indicates scaling up trend, negative indicates scaling down.
-
-        Returns:
-            float: Scaled slope representing action trend magnitude
-        """
-        if len(self.action_history) < 2:
-            return 0.0
-
-        history = self.action_history[-self.action_trend_window :]
-        n = len(history)
-
-        if n < 3:
-            # Not enough data for linear regression, use simple difference
-            return float(history[-1] - history[0])
-
-        # Linear regression slope: measures if actions are trending up/down
-        # Formula: (n*sum(xy) - sum(x)*sum(y)) / (n*sum(x^2) - (sum(x))^2)
-        import numpy as np
-
-        x = np.arange(n)
-        y = np.array(history)
-
-        slope = (n * np.sum(x * y) - np.sum(x) * np.sum(y)) / (
-            n * np.sum(x**2) - np.sum(x) ** 2 + 1e-10
-        )
-
-        # Scale slope to meaningful range
-        scaled_slope = slope * self.action_trend_window
-
-        return float(scaled_slope)
-
-    def _categorize_action_trend(self) -> str:
-        """
-        Helps agent detect scaling patterns (increasing, decreasing, stable).
-
-        Returns:
-            str: 'up', 'down', or 'stable'
-        """
-        trend_value = self._calculate_action_trend_value()
-
-        if trend_value > 5.0:
-            return "up"
-        elif trend_value < -5.0:
-            return "down"
-        else:
-            return "stable"
-
     def _get_observation(self) -> dict[str, Union[float, str]]:
         """
-        This is the state representation that RL agents use for decision making.
+        Returns observation dict used by RL agents.
+
+        State key fields (used by agents for Q-table indexing):
+        - cpu_usage, memory_usage, response_time, last_replica
+
+        Auxiliary fields (for logging only, NOT in state key):
+        - response_time_ms, current_replicas
         """
         response_time_percentage: float = min(
             (self.response_time / self.max_response_time) * 100.0, 100.0
         )
-
-        # Accounts for current number of replicas to provide meaningful percentage
-        # Example: 80 req/s with 1 pod (80 capacity) = 100%, but with 10 pods (800 capacity) = 10%
-        current_capacity: float = self.per_pod_capacity * self.replica_state
-        request_rate_normalized: float = min(
-            100.0, (self.request_rate / current_capacity) * 100.0
-        )
-
-        request_rate_trend_category: str = self._categorize_request_rate_trend()
-        action_trend_category: str = self._categorize_action_trend()
 
         return {
             # Core resource metrics (0-100%)
@@ -774,41 +389,21 @@ class KubernetesEnv:
             "memory_usage": self.memory_usage,
             "response_time": response_time_percentage,
             "response_time_ms": self.response_time,  # Raw value in milliseconds for logging
-            # Request rate metrics
-            "request_rate": self.request_rate,  # Raw value for logging
-            "request_rate_normalized": request_rate_normalized,  # Percentage of current capacity
-            "request_rate_trend": self.request_rate_trend,  # Raw difference
-            "request_rate_trend_category": request_rate_trend_category,  # Categorical: up/down/stable
             # Action and system state
-            "last_action": self.last_action,  # Action as percentage (0-99 representing min to max replicas)
-            "action_trend_category": action_trend_category,  # Categorical: up/down/stable
+            "last_replica": self.last_replica,  # Previous replica count (1 to max_replicas)
             "current_replicas": float(self.replica_state),  # Absolute replica count
         }
 
     def step(
         self, action: int, q_table_size: int = 0
     ) -> tuple[dict[str, Union[float, str]], float, bool, dict]:
-        # Calculate action change before updating last_action
-        self.action_change = action - self.last_action
-        self.last_action = action
+        # Store current action as last_replica before executing
+        self.last_replica = action
 
-        # Maintains sliding window of recent actions to detect patterns
-        self.action_history.append(action)
-        if len(self.action_history) > self.action_trend_window:
-            self.action_history.pop(0)
-
-        self.previous_request_rate = self.request_rate
-
-        percentage = (action / 99.0) if len(self.action_space) > 1 else 0.0
         self.replica_state_old = self.replica_state
-        self.replica_state = round(self.min_replicas + percentage * self.range_replicas)
-        self.replica_state = max(
-            self.min_replicas, min(self.replica_state, self.max_replicas)
-        )
+        self.replica_state = max(self.min_replicas, min(action, self.max_replicas))
 
         self._scale_and_get_metrics()
-
-        self.request_rate_trend = self.request_rate - self.previous_request_rate
 
         reward, reward_breakdown = self._calculate_reward()
 
@@ -829,7 +424,6 @@ class KubernetesEnv:
             "cpu_usage": self.cpu_usage,
             "memory_usage": self.memory_usage,
             "response_time": self.response_time,
-            "request_rate": self.request_rate,
             # Percentages
             "response_time_percentage": reward_breakdown.get(
                 "response_time_percentage", 0.0
@@ -857,10 +451,6 @@ class KubernetesEnv:
             "cpu_usage": self.cpu_usage,
             "memory_usage": self.memory_usage,
             "response_time": self.response_time,
-            "request_rate": self.request_rate,
-            "request_rate_normalized": reward_breakdown.get(
-                "request_rate_normalized", 0.0
-            ),
             "response_time_percentage": reward_breakdown.get(
                 "response_time_percentage", 0.0
             ),
@@ -889,12 +479,8 @@ class KubernetesEnv:
         )
         self.replica_state = self.min_replicas
         self._scale_and_get_metrics()
-        self.last_action = 0
+        self.last_replica = self.min_replicas
 
-        self.action_history = []
-
-        # Reset episode-specific metrics and increment episode counter
-        self.cumulative_reward = 0.0
         self.episode_reward = 0.0  # Reset for new episode
         self.episode_number += 1
 

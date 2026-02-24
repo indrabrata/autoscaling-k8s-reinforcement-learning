@@ -30,18 +30,19 @@ if __name__ == "__main__":
 
     try:
         metrics_endpoints_str = os.getenv(
-            "METRICS_ENDPOINTS_METHOD", "[['/', 'GET'], ['/docs', 'GET']]"
+            "METRICS_ENDPOINTS_METHOD", "[('/', 'GET'), ('/docs', 'GET')]"
         )
         metrics_endpoints_method = ast.literal_eval(metrics_endpoints_str)
     except (ValueError, SyntaxError):
         logger.warning("Invalid METRICS_ENDPOINTS_METHOD format, using default")
-        metrics_endpoints_method = [["/", "GET"], ["/docs", "GET"]]
+        metrics_endpoints_method = [("/", "GET"), ("/docs", "GET")]
 
     choose_algorithm = os.getenv("ALGORITHM", "Q").upper()
+    max_replicas = int(os.getenv("MAX_REPLICAS", "12"))
 
     env = KubernetesEnv(
         min_replicas=int(os.getenv("MIN_REPLICAS", "1")),
-        max_replicas=int(os.getenv("MAX_REPLICAS", "12")),
+        max_replicas=max_replicas,
         iteration=int(os.getenv("ITERATION", "10")),
         namespace=os.getenv("NAMESPACE", "default"),
         deployment_name=os.getenv("DEPLOYMENT_NAME", "ecom-api"),
@@ -59,9 +60,6 @@ if __name__ == "__main__":
         metrics_endpoints_method=metrics_endpoints_method,
         metrics_interval=int(os.getenv("METRICS_INTERVAL", "15")),
         max_scaling_retries=int(os.getenv("MAX_SCALING_RETRIES", "1000")),
-        request_rate_per_pod_capacity=float(
-            os.getenv("REQUEST_RATE_PER_POD_CAPACITY", "80.0")
-        ),
         algorithm=choose_algorithm,
     )
 
@@ -73,6 +71,7 @@ if __name__ == "__main__":
             epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.99)),
             epsilon_min=float(os.getenv("EPSILON_MIN", 0.01)),
             created_at=start_time,
+            n_actions=max_replicas,
             logger=logger,
         )
 
@@ -84,6 +83,7 @@ if __name__ == "__main__":
             epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.99)),
             epsilon_min=float(os.getenv("EPSILON_MIN", 0.01)),
             created_at=start_time,
+            n_actions=max_replicas,
             logger=logger,
         )
 

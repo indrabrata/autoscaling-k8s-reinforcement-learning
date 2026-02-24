@@ -1,19 +1,45 @@
+import csv
 import logging
 import signal
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
-from typing import Optional, Union
+from typing import IO, Optional, Union
 
 from environment import KubernetesEnv
 from rl import QLearning, QLearningFuzzy
 from utils import log_verbose_details
 
+CSV_COLUMNS = [
+    "timestamp",
+    "episode",
+    "step",
+    "action",
+    "reward",
+    "cumulative_reward",
+    "epsilon",
+    "q_table_size",
+    "iteration",
+    "replica_state",
+    "cpu_usage",
+    "memory_usage",
+    "response_time",
+    "response_time_percentage",
+    "optimal",
+    "balanced",
+    "wasteful",
+    "critical",
+    "cost_penalty",
+    "replica_ratio",
+]
+
+
 @dataclass
 class SaveConfig:
     note: str
     start_time: int
+
 
 class Trainer:
     def __init__(
@@ -25,6 +51,7 @@ class Trainer:
         resume_path: str = "",
         reset_epsilon: bool = True,
         change_epsilon_decay: Optional[float] = None,
+        csv_output: str = "",
     ) -> None:
         self.agent = agent
         self.env = env
@@ -32,6 +59,9 @@ class Trainer:
         self.savecfg: Optional[SaveConfig] = None
         self._old_sigint = None
         self._old_sigterm = None
+        self._csv_path = csv_output
+        self._csv_file = None
+        self._csv_writer = None
         if resume and resume_path:
             try:
                 start_epsilon = self.agent.epsilon
@@ -60,7 +90,7 @@ class Trainer:
         if agent_type == "Q":
             model_type = "qlearning"
         elif agent_type == "QFUZZYHYBRID":
-            model_type = "qlearningfuzzy"    
+            model_type = "qlearningfuzzy"
 
         interrupted_dir = Path(
             f"model/{model_type}/{self.savecfg.start_time}_{self.savecfg.note}/interrupted"
@@ -99,10 +129,56 @@ class Trainer:
         if self._old_sigterm is not None:
             signal.signal(signal.SIGTERM, self._old_sigterm)
 
+    def _open_csv(self) -> None:
+        if not self._csv_path:
+            return
+        path = Path(self._csv_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._csv_file = open(path, "w", newline="", encoding="utf-8")  # noqa: SIM115
+        self._csv_writer = csv.DictWriter(self._csv_file, fieldnames=CSV_COLUMNS)
+        self._csv_writer.writeheader()
+        self._csv_file.flush()
+        self.logger.info(f"Training CSV logging to: {path}")
+
+    def _write_csv_row(self, episode: int, step: int, action: int, info: dict) -> None:
+        if self._csv_writer is None:
+            return
+        row = {
+            "timestamp": int(time.time()),
+            "episode": episode,
+            "step": step,
+            "action": action,
+            "reward": info.get("reward", 0.0),
+            "cumulative_reward": self.env.cumulative_reward,
+            "epsilon": self.agent.epsilon,
+            "q_table_size": len(self.agent.q_table),
+            "iteration": info.get("iteration", 0),
+            "replica_state": info.get("replica_state", 0),
+            "cpu_usage": info.get("cpu_usage", 0.0),
+            "memory_usage": info.get("memory_usage", 0.0),
+            "response_time": info.get("response_time", 0.0),
+            "response_time_percentage": info.get("response_time_percentage", 0.0),
+            "optimal": info.get("optimal", 0.0),
+            "balanced": info.get("balanced", 0.0),
+            "wasteful": info.get("wasteful", 0.0),
+            "critical": info.get("critical", 0.0),
+            "cost_penalty": info.get("cost_penalty", 0.0),
+            "replica_ratio": info.get("replica_ratio", 0.0),
+        }
+        self._csv_writer.writerow(row)
+        self._csv_file.flush()
+
+    def _close_csv(self) -> None:
+        if self._csv_file:
+            self._csv_file.close()
+            self._csv_file = None
+            self._csv_writer = None
+
     def train(self, episodes: int, note: str, start_time: int) -> None:
         self.savecfg = SaveConfig(note=note, start_time=start_time)
         self._install_signal_handlers()
-            
+        self._open_csv()
+
         try:
             total_best = float("-inf")
             for ep in range(episodes):
@@ -114,12 +190,19 @@ class Trainer:
 
                 obs = self.env.reset()
                 total = 0.0
+                step = 0
                 while True:
+                    step += 1
                     act = self.agent.get_action(obs)
-                    nxt, rew, term, info = self.env.step(act, q_table_size=len(self.agent.q_table))
+                    nxt, rew, term, info = self.env.step(
+                        act, q_table_size=len(self.agent.q_table)
+                    )
                     self.agent.update_q_table(obs, act, rew, nxt)
                     total += rew
                     obs = nxt
+
+                    self._write_csv_row(ep + 1, step, act, info)
+
                     self.logger.info(
                         f"Action: {act}, Reward: {rew}, Total: {total} | "
                         f"Iteration: {info['iteration']}"
@@ -147,6 +230,7 @@ class Trainer:
             self._interrupted_save()
             raise
         finally:
+            self._close_csv()
             self._restore_signal_handlers()
             self.logger.info("Training finished (cleanup done).")
 
@@ -155,8 +239,10 @@ class Trainer:
     ) -> None:
         ext = ".pkl"
         model_type = (
-            "qlearningfuzzy" if isinstance(self.agent, QLearningFuzzy)
-            else "qlearning" if isinstance(self.agent, QLearning)
+            "qlearningfuzzy"
+            if isinstance(self.agent, QLearningFuzzy)
+            else "qlearning"
+            if isinstance(self.agent, QLearning)
             else "unknown"
         )
         path = (

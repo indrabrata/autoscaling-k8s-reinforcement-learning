@@ -83,5 +83,5 @@ kubeconfig
 *.temp
 .cache/
 
-reward-function-analysis.md
-training-prediction-analysis.md
+
+metrics_output/

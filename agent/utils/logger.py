@@ -155,13 +155,9 @@ def log_verbose_details(
         mem = float(observation.get("memory_usage", 0.0))
         rt = float(observation.get("response_time", 0.0))
         rt_ms = float(observation.get("response_time_ms", 0.0))
-        act = observation.get("last_action", 0)
+        act = observation.get("last_replica", 0)
         iter_no = observation.get("iteration")
 
-        req_rate_norm = float(observation.get("request_rate_normalized", 0.0))
-        req_rate_raw = float(observation.get("request_rate", 0.0))
-        req_trend = observation.get("request_rate_trend_category", "stable")
-        act_trend = observation.get("action_trend_category", "stable")
         replicas = int(observation.get("current_replicas", 1))
         replica_util = float(observation.get("replica_utilization", 0.0))
 
@@ -169,13 +165,11 @@ def log_verbose_details(
         cpu_col = _color(cpu, warn=70, crit=90)
         mem_col = _color(mem, warn=75, crit=90)
         rt_col = _color(rt, warn=70, crit=90)
-        req_col = _color(req_rate_norm, warn=70, crit=90)
 
         # Progress bars
         cpu_bar = _bar(cpu)
         mem_bar = _bar(mem)
         rt_bar = _bar(rt)
-        req_bar = _bar(req_rate_norm)
 
         # Get Q-values for current state
         state_key = agent.get_state_key(observation)
@@ -192,14 +186,12 @@ def log_verbose_details(
         cpu_str = f"{cpu_col}CPU {_fmt_pct(cpu)} {cpu_bar}{RESET}"
         mem_str = f"{mem_col}MEM {_fmt_pct(mem)} {mem_bar}{RESET}"
         rt_str = f"{rt_col}RT {_fmt_pct(rt)} {rt_bar}{RESET} ({rt_ms:.1f} ms)"
-        req_str = f"{req_col}REQ {_fmt_pct(req_rate_norm)} {req_bar}{RESET} ({req_rate_raw:.1f} rps)"
 
-        logger.info(f"{hdr}| {cpu_str} | {mem_str} | {rt_str} | {req_str}")
+        logger.info(f"{hdr}| {cpu_str} | {mem_str} | {rt_str}")
 
-        # Line 2: Trends, replicas, actions, Q-values
+        # Line 2: Replicas, actions, Q-values
         rep_str = f"Replicas {replicas} ({_fmt_pct(replica_util)})"
         act_str = f"ACT {int(act):3d}"
-        trend_str = f"Trends: Req={req_trend.upper():>6s} Act={act_trend.upper():>6s}"
 
         if qmax is not None and best_idx is not None:
             q_str = f"Qmax {qmax:+.3f}"
@@ -207,9 +199,7 @@ def log_verbose_details(
         else:
             q_str, best_s = "Qmax  n/a", "Best  n/a"
 
-        logger.info(
-            f"{'':>{len(hdr)}}| {rep_str:25s} | {act_str} | {trend_str:30s} | {q_str} | {best_s}"
-        )
+        logger.info(f"{'':>{len(hdr)}}| {rep_str:25s} | {act_str} | {q_str} | {best_s}")
 
     except Exception as e:
         logger.warning(f"Error in verbose logging: {e}")

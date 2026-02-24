@@ -32,11 +32,12 @@ if __name__ == "__main__":
         metrics_endpoints_method = [("/", "GET"), ("/docs", "GET")]
 
     choose_algorithm = os.getenv("ALGORITHM", "Q").upper()
+    max_replicas = int(os.getenv("MAX_REPLICAS", "12"))
 
     # No InfluxDB - pass influxdb=None so env.step() skips writing
     env = KubernetesEnv(
         min_replicas=int(os.getenv("MIN_REPLICAS", "1")),
-        max_replicas=int(os.getenv("MAX_REPLICAS", "12")),
+        max_replicas=max_replicas,
         iteration=int(os.getenv("ITERATION", "10")),
         namespace=os.getenv("NAMESPACE", "default"),
         deployment_name=os.getenv("DEPLOYMENT_NAME", "ecom-api"),
@@ -54,9 +55,6 @@ if __name__ == "__main__":
         metrics_endpoints_method=metrics_endpoints_method,
         metrics_interval=int(os.getenv("METRICS_INTERVAL", "15")),
         max_scaling_retries=int(os.getenv("MAX_SCALING_RETRIES", "1000")),
-        request_rate_per_pod_capacity=float(
-            os.getenv("REQUEST_RATE_PER_POD_CAPACITY", "80.0")
-        ),
         algorithm=choose_algorithm,
     )
 
@@ -68,6 +66,7 @@ if __name__ == "__main__":
             epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.99)),
             epsilon_min=float(os.getenv("EPSILON_MIN", 0.01)),
             created_at=start_time,
+            n_actions=max_replicas,
             logger=logger,
         )
     elif choose_algorithm == "Q-LEARNING-FUZZY":
@@ -78,6 +77,7 @@ if __name__ == "__main__":
             epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.99)),
             epsilon_min=float(os.getenv("EPSILON_MIN", 0.01)),
             created_at=start_time,
+            n_actions=max_replicas,
             logger=logger,
         )
     else:
@@ -101,9 +101,7 @@ if __name__ == "__main__":
     collector_thread = threading.Thread(
         target=run_collector,
         kwargs={
-            "prometheus_url": os.getenv(
-                "PROMETHEUS_URL", "http://localhost:1234/prom"
-            ),
+            "prometheus_url": os.getenv("PROMETHEUS_URL", "http://localhost:1234/prom"),
             "namespace": os.getenv("NAMESPACE", "default"),
             "deployment_name": os.getenv("DEPLOYMENT_NAME", "ecom-api"),
             "output_path": csv_output,
@@ -141,8 +139,7 @@ if __name__ == "__main__":
             f"replicas={info.get('replica_state', '?')}  "
             f"CPU={info.get('cpu_usage', 0):.1f}%  "
             f"MEM={info.get('memory_usage', 0):.1f}%  "
-            f"RT={info.get('response_time', 0):.1f}ms  "
-            f"RPS={info.get('request_rate', 0):.1f}"
+            f"RT={info.get('response_time', 0):.1f}ms"
         )
 
         log_verbose_details(

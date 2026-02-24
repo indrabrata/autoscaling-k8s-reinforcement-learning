@@ -40,20 +40,15 @@ class QLearning:
     def add_episode_count(self, count: int = 1):
         self.episodes_trained += count
 
-    def get_state_key(
-        self, observation: dict
-    ) -> tuple[float, float, float, float, str, float, str]:
+    def get_state_key(self, observation: dict) -> tuple[float, float, float, float]:
         """
         Extract state key from observation using real continuous values.
 
         State structure (continuous values):
         - cpu_usage: Raw CPU usage percentage (0-100)
         - memory_usage: Raw memory usage percentage (0-100)
-        - response_time: Raw response time
-        - request_rate: Raw request rate (normalized)
-        - request_rate_trend_category: Categorical (up, down, stable)
-        - last_action: Raw last action value (0-99)
-        - action_trend_category: Categorical (up, down, stable)
+        - response_time: Raw response time as percentage of max (0-100)
+        - last_replica: Previous replica count
 
         Returns:
             Tuple: State key for Q-table indexing
@@ -64,39 +59,34 @@ class QLearning:
         else:
             response_time = response_time_raw
 
-        # Use real continuous values
         cpu_usage = observation["cpu_usage"]
         memory_usage = observation["memory_usage"]
-        request_rate = observation["request_rate_normalized"]
-        last_action = observation["last_action"]
-
-        # Categorical trends (already categorized by environment)
-        request_rate_trend_category = observation["request_rate_trend_category"]
-        action_trend_category = observation["action_trend_category"]
+        last_replica = observation["last_replica"]
 
         return (
             cpu_usage,
             memory_usage,
             response_time,
-            request_rate,
-            request_rate_trend_category,
-            last_action,
-            action_trend_category,
+            last_replica,
         )
 
     def get_action(self, observation: dict) -> int:
+        """
+        Returns an action representing the desired replica count (1 to n_actions).
+        Internally, Q-table uses 0-based indexing where index i corresponds to (i+1) replicas.
+        """
         state_key = self.get_state_key(observation)
 
         if state_key not in self.q_table:
             self.q_table[state_key] = np.zeros(self.n_actions)
 
         if np.random.rand() < self.epsilon:
-            action = np.random.randint(0, self.n_actions)
+            action = np.random.randint(1, self.n_actions + 1)
             self.logger.info(
                 f"[Epsilon] value={self.epsilon:.6f} | action=EXPLORATION ({action})"
             )
         else:
-            action = int(np.argmax(self.q_table[state_key]))
+            action = int(np.argmax(self.q_table[state_key])) + 1
             self.logger.info(
                 f"[Epsilon] value={self.epsilon:.6f} | action=EXPLOITATION ({action})"
             )
@@ -106,6 +96,9 @@ class QLearning:
     def update_q_table(
         self, observation: dict, action: int, reward: float, next_observation: dict
     ):
+        """
+        action: replica count (1 to n_actions). Converted to 0-based index for Q-table.
+        """
         state_key = self.get_state_key(observation)
         next_state_key = self.get_state_key(next_observation)
 
@@ -114,11 +107,12 @@ class QLearning:
         if next_state_key not in self.q_table:
             self.q_table[next_state_key] = np.zeros(self.n_actions)
 
+        action_idx = action - 1
         best_next_action = np.max(self.q_table[next_state_key])
-        self.q_table[state_key][action] += self.learning_rate * (
+        self.q_table[state_key][action_idx] += self.learning_rate * (
             reward
             + self.discount_factor * best_next_action
-            - self.q_table[state_key][action]
+            - self.q_table[state_key][action_idx]
         )
         if self.epsilon > self.epsilon_min:
             self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
@@ -198,7 +192,7 @@ class QLearning:
         print(f"Showing {states_to_show}/{total_states} Q-table states:\n")
         print("-" * 150)
         print(
-            f"{'Idx':<5} {'State: (CPU, MEM, RESP, ReqRate, ReqTrend, LastAct, ActTrend)':<85} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}"
+            f"{'Idx':<5} {'State: (CPU, MEM, RESP, LastAct)':<85} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}"
         )
         print("-" * 150)
 
@@ -207,13 +201,12 @@ class QLearning:
                 break
 
             try:
-                # State structure with 7 components (continuous values + categorical trends)
-                cpu, mem, resp, req_rate, req_trend, last_act, act_trend = state_key
-                state_str = f"({cpu:.2f}, {mem:.2f}, {resp:.2f}, {req_rate:.2f}, {req_trend}, {last_act:.2f}, {act_trend})"
+                cpu, mem, resp, last_act = state_key
+                state_str = f"({cpu:.2f}, {mem:.2f}, {resp:.2f}, {last_act:.2f})"
             except Exception:
                 state_str = str(state_key)
 
-            best_action = int(np.argmax(actions))
+            best_action = int(np.argmax(actions)) + 1  # 1-based replica count
             best_value = float(np.max(actions))
             avg_value = float(np.mean(actions))
 
@@ -221,7 +214,7 @@ class QLearning:
                 f"{i + 1:<5} {state_str:<45} {best_action:<8} {best_value:<10.4f} {avg_value:<10.4f}"
             )
 
-            print(" " * 7 + "Q-Values (Action → Value):")
+            print(" " * 7 + "Q-Values (Replica → Value):")
             actions_per_row = 10
             n_actions = len(actions)
             rows = math.ceil(n_actions / actions_per_row)
@@ -233,7 +226,7 @@ class QLearning:
 
                 row_str = ""
                 for j, q_val in enumerate(segment, start=start_idx):
-                    row_str += f"[A{j:02d}] {q_val:7.4f}   "
+                    row_str += f"[R{j + 1:02d}] {q_val:7.4f}   "
                 print(" " * 9 + row_str)
             print("-" * 120)
 

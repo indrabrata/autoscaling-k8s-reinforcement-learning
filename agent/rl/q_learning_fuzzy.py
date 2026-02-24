@@ -35,26 +35,21 @@ class QLearningFuzzy:
         self.n_actions = n_actions
         self.episodes_trained = 0
         self.q_table = {}
-        self.fuzzy = Fuzzy(logger=logger)
+        self.fuzzy = Fuzzy(logger=logger, max_replicas=n_actions)
         self.logger = logger or Logger(__name__)
 
         self.logger.info("Initialized QFuzzyHybrid agent")
         self.logger.debug(f"Agent parameters: {self.__dict__}")
 
-    def get_state_key(
-        self, observation: dict
-    ) -> Tuple[str, str, str, str, str, str, str]:
+    def get_state_key(self, observation: dict) -> Tuple[str, str, str, str]:
         """
-        CRITICAL: Extract state key from observation using fuzzy logic.
+        Extract state key from observation using fuzzy logic.
 
         State structure:
-        - cpu_label: Fuzzified CPU usage (very_low, low, medium, high, very_high)
-        - mem_label: Fuzzified memory usage (very_low, low, medium, high, very_high)
-        - resp_label: Fuzzified response time (very_low, low, medium, high, very_high)
-        - request_rate_label: Fuzzified request rate (normalized to current capacity) (very_low, low, medium, high, very_high)
-        - request_rate_trend_category: Categorical (up, down, stable)
-        - last_action_label: Fuzzified last action percentage (very_low, low, medium, high, very_high)
-        - action_trend_category: Categorical (up, down, stable)
+        - cpu_label: Fuzzified CPU usage (low, medium, high)
+        - mem_label: Fuzzified memory usage (low, medium, high)
+        - resp_label: Fuzzified response time (low, medium, high)
+        - last_replica_label: Fuzzified last replica count (low, medium, high)
 
         Returns:
             Tuple: State key for Q-table indexing
@@ -74,40 +69,34 @@ class QLearningFuzzy:
         resp_label = max(
             fuzzy_state["response_time"], key=lambda k: fuzzy_state["response_time"][k]
         )
-        request_rate_label = max(
-            fuzzy_state["request_rate_normalized"],
-            key=lambda k: fuzzy_state["request_rate_normalized"][k],
+        last_replica_label = max(
+            fuzzy_state["last_replica"], key=lambda k: fuzzy_state["last_replica"][k]
         )
-        last_action_label = max(
-            fuzzy_state["last_action"], key=lambda k: fuzzy_state["last_action"][k]
-        )
-
-        request_rate_trend_category = observation["request_rate_trend_category"]
-        action_trend_category = observation["action_trend_category"]
 
         return (
             cpu_label,
             mem_label,
             resp_label,
-            request_rate_label,
-            request_rate_trend_category,
-            last_action_label,
-            action_trend_category,
+            last_replica_label,
         )
 
     def get_action(self, observation: dict) -> int:
+        """
+        Returns an action representing the desired replica count (1 to n_actions).
+        Internally, Q-table uses 0-based indexing where index i corresponds to (i+1) replicas.
+        """
         state_key = self.get_state_key(observation)
 
         if state_key not in self.q_table:
             self.q_table[state_key] = np.zeros(self.n_actions)
 
         if np.random.rand() < self.epsilon:
-            action = np.random.randint(0, self.n_actions)
+            action = np.random.randint(1, self.n_actions + 1)
             self.logger.info(
                 f"[Epsilon] value={self.epsilon:.6f} | action=EXPLORATION ({action})"
             )
         else:
-            action = int(np.argmax(self.q_table[state_key]))
+            action = int(np.argmax(self.q_table[state_key])) + 1
             self.logger.info(
                 f"[Epsilon] value={self.epsilon:.6f} | action=EXPLOITATION ({action})"
             )
@@ -121,6 +110,9 @@ class QLearningFuzzy:
         reward: float,
         next_observation: dict,
     ):
+        """
+        action: replica count (1 to n_actions). Converted to 0-based index for Q-table.
+        """
         state_key = self.get_state_key(observation)
         next_state_key = self.get_state_key(next_observation)
 
@@ -129,10 +121,11 @@ class QLearningFuzzy:
         if next_state_key not in self.q_table:
             self.q_table[next_state_key] = np.zeros(self.n_actions)
 
+        action_idx = action - 1
         best_next_action = np.max(self.q_table[next_state_key])
-        old_value = self.q_table[state_key][action]
+        old_value = self.q_table[state_key][action_idx]
 
-        self.q_table[state_key][action] += self.learning_rate * (
+        self.q_table[state_key][action_idx] += self.learning_rate * (
             reward + self.discount_factor * best_next_action - old_value
         )
 
@@ -141,7 +134,7 @@ class QLearningFuzzy:
 
         self.logger.debug(
             f"Q-update | S={state_key} | A={action} | R={reward:.3f} | "
-            f"NewQ={self.q_table[state_key][action]:.3f}"
+            f"NewQ={self.q_table[state_key][action_idx]:.3f}"
         )
 
     def add_episode_count(self, count: int = 1):
@@ -220,7 +213,7 @@ class QLearningFuzzy:
         print(f"Showing {states_to_show}/{total_states} fuzzy Q-table states:\n")
         print("-" * 150)
         print(
-            f"{'Idx':<5} {'State: (CPU, MEM, RESP, ReqRate, ReqTrend, LastAct, ActTrend)':<85} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}"
+            f"{'Idx':<5} {'State: (CPU, MEM, RESP, LastAct)':<85} {'BestAct':<8} {'BestQ':<10} {'AvgQ':<10}"
         )
         print("-" * 150)
 
@@ -233,16 +226,15 @@ class QLearningFuzzy:
                     cpu_label,
                     mem_label,
                     resp_label,
-                    req_rate_label,
-                    req_trend_cat,
                     last_act_label,
-                    act_trend_cat,
                 ) = state_key
-                fuzzy_state_str = f"({cpu_label}, {mem_label}, {resp_label}, {req_rate_label}, {req_trend_cat}, {last_act_label}, {act_trend_cat})"
+                fuzzy_state_str = (
+                    f"({cpu_label}, {mem_label}, {resp_label}, {last_act_label})"
+                )
             except Exception:
                 fuzzy_state_str = str(state_key)
 
-            best_action = int(np.argmax(actions))
+            best_action = int(np.argmax(actions)) + 1  # 1-based replica count
             best_value = float(np.max(actions))
             avg_value = float(np.mean(actions))
 
@@ -250,7 +242,7 @@ class QLearningFuzzy:
                 f"{i + 1:<5} {fuzzy_state_str:<45} {best_action:<8} {best_value:<10.4f} {avg_value:<10.4f}"
             )
 
-            print(" " * 7 + "Q-Values (Action → Value):")
+            print(" " * 7 + "Q-Values (Replica → Value):")
             actions_per_row = 10
             n_actions = len(actions)
             rows = math.ceil(n_actions / actions_per_row)
@@ -262,7 +254,7 @@ class QLearningFuzzy:
 
                 row_str = ""
                 for j, q_val in enumerate(segment, start=start_idx):
-                    row_str += f"[A{j:02d}] {q_val:7.4f}   "
+                    row_str += f"[R{j + 1:02d}] {q_val:7.4f}   "
                 print(" " * 9 + row_str)
             print("-" * 120)
 

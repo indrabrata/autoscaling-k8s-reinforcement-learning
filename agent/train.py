@@ -73,10 +73,12 @@ if __name__ == "__main__":
         metrics_endpoints_method = [["/", "GET"], ["/docs", "GET"]]
 
     choose_algorithm = os.getenv("ALGORITHM", "Q-LEARNING").upper()
+    max_replicas = int(os.getenv("MAX_REPLICAS", "10"))
 
     env = KubernetesEnv(
         min_replicas=int(os.getenv("MIN_REPLICAS", "1")),
-        max_replicas=int(os.getenv("MAX_REPLICAS", "12")),
+        max_replicas=max_replicas,
+        total_episode=int(os.getenv("EPISODES", "10")),
         iteration=int(os.getenv("ITERATION", "10")),
         namespace=os.getenv("NAMESPACE", "default"),
         deployment_name=os.getenv("DEPLOYMENT_NAME", "ecom-api"),
@@ -95,9 +97,6 @@ if __name__ == "__main__":
         metrics_interval=int(os.getenv("METRICS_INTERVAL", "15")),
         metrics_quantile=float(os.getenv("METRICS_QUANTILE", "0.90")),
         max_scaling_retries=int(os.getenv("MAX_SCALING_RETRIES", "1000")),
-        request_rate_per_pod_capacity=float(
-            os.getenv("REQUEST_RATE_PER_POD_CAPACITY", "80.0")
-        ),
         algorithm=choose_algorithm,
     )
 
@@ -109,6 +108,7 @@ if __name__ == "__main__":
             epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.99)),
             epsilon_min=float(os.getenv("EPSILON_MIN", 0.01)),
             created_at=start_time,
+            n_actions=max_replicas,
             logger=logger,
         )
 
@@ -120,6 +120,7 @@ if __name__ == "__main__":
             epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.99)),
             epsilon_min=float(os.getenv("EPSILON_MIN", 0.01)),
             created_at=start_time,
+            n_actions=max_replicas,
             logger=logger,
         )
 
@@ -155,6 +156,14 @@ if __name__ == "__main__":
             "RESUME is True but RESUME_PATH is empty. Starting from scratch."
         )
 
+    model_type = (
+        "qlearningfuzzy" if choose_algorithm == "Q-LEARNING-FUZZY" else "qlearning"
+    )
+    csv_output = os.getenv(
+        "CSV_OUTPUT_PATH",
+        f"metrics_output/train_{model_type}_{start_time}_{note}.csv",
+    )
+
     trainer = Trainer(
         agent=algorithm,
         env=env,
@@ -163,6 +172,7 @@ if __name__ == "__main__":
         resume_path=final_resume_path,
         reset_epsilon=ast.literal_eval(os.getenv("RESET_EPSILON", "True")),
         change_epsilon_decay=float(os.getenv("EPSILON_DECAY", 0.90)),
+        csv_output=csv_output,
     )
 
     episodes = int(os.getenv("EPISODES", "10"))
