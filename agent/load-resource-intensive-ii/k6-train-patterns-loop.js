@@ -45,10 +45,7 @@ for (let i = 0; i < CYCLES; i++) {
 const totalMinutes = CYCLES * 30;
 const totalHours = (totalMinutes / 60).toFixed(1);
 
-console.log(`=== K6 Training: Unseen Patterns Loop ===`);
 console.log(`Cycles: ${CYCLES} x 30min = ${totalMinutes}min (~${totalHours}h)`);
-console.log(`Max VUs: 200`);
-console.log(`Pattern: Very Low → High → Very High → Medium → Low (repeat)`);
 
 export const options = {
   scenarios: {

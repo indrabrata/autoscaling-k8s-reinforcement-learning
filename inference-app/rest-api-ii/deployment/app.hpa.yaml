@@ -1,7 +1,7 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: resource-intensive-hpa
+  name: resource-intensive-q-hpa
   namespace: default
 spec:
   scaleTargetRef:
@@ -10,3 +10,18 @@ spec:
     name: resource-intensive-q
   minReplicas: 1
   maxReplicas: 10
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 10
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 10
+          periodSeconds: 60
+      selectPolicy: Max
