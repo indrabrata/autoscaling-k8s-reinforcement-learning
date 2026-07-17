@@ -2,5 +2,6 @@ model/
 data/
 data-testing/
 data-training/
+metrics_output/
 .venv
 logs/

@@ -6,7 +6,6 @@ cachetools==5.5.2
     # via google-auth
 certifi==2025.4.26
     # via
-    #   influxdb-client
     #   kubernetes
     #   requests
 charset-normalizer==3.4.2
@@ -29,8 +28,6 @@ google-auth==2.40.3
     # via kubernetes
 idna==3.10
     # via requests
-influxdb-client==1.50.0
-    # via agent (pyproject.toml)
 ipykernel==7.2.0
     # via agent (pyproject.toml)
 ipython==9.10.0
@@ -86,7 +83,6 @@ pygments==2.19.1
 python-dateutil==2.9.0.post0
     # via
     #   dateparser
-    #   influxdb-client
     #   jupyter-client
     #   kubernetes
 python-dotenv==1.2.1
@@ -99,8 +95,6 @@ pyzmq==27.1.0
     # via
     #   ipykernel
     #   jupyter-client
-reactivex==4.1.0
-    # via influxdb-client
 regex==2026.2.19
     # via dateparser
 requests==2.32.4
@@ -129,15 +123,12 @@ traitlets==5.14.3
     #   jupyter-client
     #   jupyter-core
     #   matplotlib-inline
-typing-extensions==4.14.0
-    # via reactivex
 tzdata==2025.2
     # via tzlocal
 tzlocal==5.3.1
     # via dateparser
 urllib3==2.4.0
     # via
-    #   influxdb-client
     #   kubernetes
     #   requests
 wcwidth==0.6.0

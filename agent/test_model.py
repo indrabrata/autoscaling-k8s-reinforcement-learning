@@ -34,7 +34,6 @@ if __name__ == "__main__":
     choose_algorithm = os.getenv("ALGORITHM", "Q").upper()
     max_replicas = int(os.getenv("MAX_REPLICAS", "12"))
 
-    # No InfluxDB - pass influxdb=None so env.step() skips writing
     env = KubernetesEnv(
         min_replicas=int(os.getenv("MIN_REPLICAS", "1")),
         max_replicas=max_replicas,
@@ -50,7 +49,6 @@ if __name__ == "__main__":
         wait_time=int(os.getenv("WAIT_TIME", "60")),
         verbose=True,
         logger=logger,
-        influxdb=None,
         prometheus_url=os.getenv("PROMETHEUS_URL", "http://localhost:1234/prom"),
         metrics_endpoints_method=metrics_endpoints_method,
         metrics_interval=int(os.getenv("METRICS_INTERVAL", "15")),
@@ -119,7 +117,7 @@ if __name__ == "__main__":
     # Run the model
     obs = env.reset()
     logger.info("=" * 80)
-    logger.info("MODEL TESTING STARTED (no InfluxDB, CSV metrics collection active)")
+    logger.info("MODEL TESTING STARTED (CSV metrics collection active)")
     logger.info(f"  Algorithm:  {choose_algorithm}")
     logger.info(f"  Model:      {model_path}")
     logger.info(f"  Q-table:    {len(agent.q_table)} states")

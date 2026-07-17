@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resource-intensive-q
+  labels:
+    app: resource-intensive-q
+    algorithm: q-learning
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resource-intensive-q
+  template:
+    metadata:
+      labels:
+        app: resource-intensive-q
+        algorithm: q-learning
+    spec:
+      containers:
+        - name: resource-intensive-q
+          image: ndraaa/resource-intensive-app-ii:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: resource-intensive-q
+  labels:
+    app: resource-intensive-q
+    service: resource-intensive-q
+    algorithm: q-learning
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "80"
+    prometheus.io/path: "/metrics"
+spec:
+  selector:
+    app: resource-intensive-q
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

@@ -1,0 +1,62 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: resource-intensive-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/q(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: resource-intensive-q
+                port:
+                  number: 80
+          - path: /api/qcrisp(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: resource-intensive-qcrisp
+                port:
+                  number: 80
+          - path: /api/qfuzzy(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: resource-intensive-qfuzzy
+                port:
+                  number: 80
+          - path: /api/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: resource-intensive
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus-ingress
+  namespace: monitoring
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /monitoring/(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: prometheus-kube-prometheus-prometheus
+                port:
+                  number: 9090

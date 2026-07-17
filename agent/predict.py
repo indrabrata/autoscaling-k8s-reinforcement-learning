@@ -4,7 +4,6 @@ import time
 
 from dotenv import load_dotenv
 
-from database.influxdb import InfluxDB
 from environment.environment import KubernetesEnv
 from rl.q_learning import QLearning
 from rl.q_learning_fuzzy import QLearningFuzzy
@@ -18,14 +17,6 @@ if __name__ == "__main__":
         "kubernetes_agent",
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         log_to_file=True,
-    )
-
-    influxdb = InfluxDB(
-        logger=logger,
-        url=os.getenv("INFLUXDB_URL", "http://localhost:8086"),
-        token=os.getenv("INFLUXDB_TOKEN", "my-token"),
-        org=os.getenv("INFLUXDB_ORG", "my-org"),
-        bucket=os.getenv("INFLUXDB_BUCKET", "my-bucket"),
     )
 
     try:
@@ -55,7 +46,6 @@ if __name__ == "__main__":
         wait_time=int(os.getenv("WAIT_TIME", "60")),
         verbose=True,
         logger=logger,
-        influxdb=influxdb,
         prometheus_url=os.getenv("PROMETHEUS_URL", "http://localhost:1234/prom"),
         metrics_endpoints_method=metrics_endpoints_method,
         metrics_interval=int(os.getenv("METRICS_INTERVAL", "15")),

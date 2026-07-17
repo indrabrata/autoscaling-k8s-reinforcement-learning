@@ -89,6 +89,63 @@ def get_state_key(self, observation):
 
 **Example state key:** `("medium", "high", "low", "medium")`
 
+### The Maximum Membership Principle
+
+The `max(...)` call above is not an implementation detail — it is the defining
+design decision of this agent, and it has a name. **Fuzzification produces a
+membership degree for *every* label, but the state key can only hold *one*.**
+The rule that picks the winner is the **maximum membership principle** (also
+called the *height method* or *max-membership defuzzification*): a value is
+assigned to whichever fuzzy set it belongs to most strongly.
+
+```text
+label*(m) = argmax  μ_l(m)
+            l ∈ {low, medium, high}
+```
+
+Concretely, for `CPU = 35%`:
+
+```text
+fuzzify(35) → { low: 0.25, medium: 0.33, high: 0.0 }
+                     │          │
+                     │          └── argmax → "medium" wins, KEPT
+                     └───────────── 0.25 membership in "low", DISCARDED
+
+state key component = "medium"
+```
+
+**What this buys.** The state key stays a single tuple of labels, so the agent
+remains ordinary tabular Q-Learning: one state per observation, one Q-value
+array per state, one update per step. Nothing about the Bellman update has to
+change. The state space is bounded at 3⁴ = 81, and observations that fuzzify to
+the same dominant labels share experience (see below).
+
+**What it costs.** The principle is *lossy by construction*. In the example
+above, CPU=35% is genuinely 25% "low" — the observation really does have two
+memberships — but that 0.25 is thrown away the moment `argmax` runs. Two
+consequences follow:
+
+1. **Degrees stop mattering once a winner is picked.** CPU=35% (medium at 0.33)
+   and CPU=50% (medium at 1.0) produce an identical state key, despite the
+   second being a textbook "medium" and the first barely qualifying. The agent
+   cannot tell a confident classification from a marginal one.
+2. **The partition is effectively crisp.** Because only the winner survives, the
+   fuzzy sets collapse into hard bins whose edges sit where the argmax flips —
+   at the *crossover points* of the membership functions. Fuzziness shapes
+   *where* those edges fall, but does not soften them.
+
+This is the specific limitation the follow-up study in [`agent-dipa/`](../agent-dipa/)
+investigates: it keeps these same trapezoids but drops the `argmax`, letting an
+observation belong to several states at once, weighted by membership. See
+[`agent-dipa/README.md`](../agent-dipa/README.md).
+
+> **Terminology.** "Maximum membership" here is a *classification* rule applied
+> to the input (choosing a label from membership degrees), not the more familiar
+> *defuzzification* of a fuzzy output back to a number. This agent has no fuzzy
+> inference stage and no fuzzy output — actions come from the Q-table, not from
+> a rule base. Reference: Ross, *Fuzzy Logic with Engineering Applications*, on
+> the max-membership principle.
+
 ### Q-Fuzzy Characteristics
 
 | Property          | Value                                        |

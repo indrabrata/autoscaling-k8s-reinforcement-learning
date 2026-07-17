@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: resource-intensive-qcrisp
+  labels:
+    app: resource-intensive-qcrisp
+    algorithm: q-learning-crisp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resource-intensive-qcrisp
+  template:
+    metadata:
+      labels:
+        app: resource-intensive-qcrisp
+        algorithm: q-learning-crisp
+    spec:
+      containers:
+        - name: resource-intensive-qcrisp
+          image: ndraaa/resource-intensive-app-ii:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: resource-intensive-qcrisp
+  labels:
+    app: resource-intensive-qcrisp
+    service: resource-intensive-qcrisp
+    algorithm: q-learning-crisp
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "80"
+    prometheus.io/path: "/metrics"
+spec:
+  selector:
+    app: resource-intensive-qcrisp
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

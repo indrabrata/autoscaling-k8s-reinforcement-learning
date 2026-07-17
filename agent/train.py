@@ -7,7 +7,6 @@ from typing import Optional
 import numpy as np
 from dotenv import load_dotenv
 
-from database import InfluxDB
 from environment import KubernetesEnv
 from rl import QLearning, QLearningFuzzy
 from trainer import Trainer
@@ -55,14 +54,6 @@ if __name__ == "__main__":
         log_to_file=True,
     )
 
-    influxdb = InfluxDB(
-        logger=logger,
-        url=os.getenv("INFLUXDB_URL", "http://localhost:8086"),
-        token=os.getenv("INFLUXDB_TOKEN", "my-token"),
-        org=os.getenv("INFLUXDB_ORG", "my-org"),
-        bucket=os.getenv("INFLUXDB_BUCKET", "my-bucket"),
-    )
-
     try:
         metrics_endpoints_str = os.getenv(
             "METRICS_ENDPOINTS_METHOD", "[['/', 'GET'], ['/docs', 'GET']]"
@@ -91,7 +82,6 @@ if __name__ == "__main__":
         wait_time=int(os.getenv("WAIT_TIME", "60")),
         verbose=True,
         logger=logger,
-        influxdb=influxdb,
         prometheus_url=os.getenv("PROMETHEUS_URL", "http://localhost:1234/prom"),
         metrics_endpoints_method=metrics_endpoints_method,
         metrics_interval=int(os.getenv("METRICS_INTERVAL", "15")),

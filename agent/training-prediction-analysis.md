@@ -45,18 +45,16 @@ logger = setup_logger(
 
 The logger writes to both console and a rotating file (max 10 MB per file, 5 backups). Log files are stored in `logs/{YYYY-MM-DD-HH-MM}/`.
 
-### 1.2 InfluxDB Connection
+### 1.2 CSV Metrics Logging
 
 ```python
-influxdb = InfluxDB(
-    url="http://localhost:8086",
-    token="my-token",
-    org="my-org",
-    bucket="my-bucket",
+csv_output = os.getenv(
+    "CSV_OUTPUT_PATH",
+    f"metrics_output/train_{model_type}_{start_time}_{note}.csv",
 )
 ```
 
-InfluxDB stores training metrics for every iteration — reward, CPU, memory, response time, replica count, Q-table size, etc. This data is used for post-training analysis.
+The Trainer writes one CSV row per iteration — reward, cumulative reward, epsilon, CPU, memory, response time, replica count, Q-table size, etc. This file is the input for post-training analysis under `analysis/`.
 
 ### 1.3 Environment Initialization
 
@@ -76,7 +74,6 @@ The environment connects directly to:
 
 - **Kubernetes API** — to scale deployments (add/remove pods)
 - **Prometheus** — to collect real-time metrics (CPU, memory, response time)
-- **InfluxDB** — to log training metrics
 
 ### 1.4 Agent Initialization
 
@@ -152,13 +149,13 @@ The Trainer supports **resume training** — continuing from a previous checkpoi
 │  │               │     │  │ K8s API  │  │Prometheus│  │   │
 │  │  ┌──────────┐ │     │  └──────────┘  └──────────┘  │   │
 │  │  │ Q-Table  │ │     │                               │   │
-│  │  └──────────┘ │     │  ┌───────────────────────┐   │   │
-│  │               │     │  │       InfluxDB         │   │   │
-│  │  ┌──────────┐ │     │  └───────────────────────┘   │   │
-│  │  │  Fuzzy   │ │     │                               │   │
-│  │  │(Q-Fuzzy) │ │     │                               │   │
-│  │  └──────────┘ │     │                               │   │
-│  └───────────────┘     └───────────────────────────────┘   │
+│  │  └──────────┘ │     └───────────────────────────────┘   │
+│  │               │                                          │
+│  │  ┌──────────┐ │     ┌───────────────────────────────┐   │
+│  │  │  Fuzzy   │ │     │   metrics_output/*.csv         │   │
+│  │  │(Q-Fuzzy) │ │     │   (written by Trainer)         │   │
+│  │  └──────────┘ │     └───────────────────────────────┘   │
+│  └───────────────┘                                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -174,7 +171,7 @@ The Trainer supports **resume training** — continuing from a previous checkpoi
 | `rl/fuzzy.py`                | `Fuzzy`                 | State fuzzification, membership functions             |
 | `utils/metrics.py`           | `get_metrics()`         | Prometheus queries, CPU/memory/RT computation         |
 | `utils/cluster.py`           | `wait_for_pods_ready()` | Wait for pods to become ready after scaling           |
-| `database/influxdb.py`       | `InfluxDB`              | Metrics storage to InfluxDB                           |
+| `collect_metrics.py`         | `run_collector()`       | Standalone/background metrics sampling to CSV         |
 
 ---
 
@@ -330,7 +327,8 @@ def step(self, action, q_table_size=0):
 
     observation = self._get_observation()
 
-    self.influxdb.write_point(...)
+    self.cumulative_reward += reward
+    self.episode_reward += reward
 
     return observation, reward, terminated, info
 ```
@@ -789,7 +787,7 @@ epsilon_decay^(total_steps) = final epsilon
 ┌──────────────────────────────────────────────────────────────┐
 │                          train.py                             │
 │  1. Setup Logger                                              │
-│  2. Connect InfluxDB                                          │
+│  2. Configure CSV output path                                 │
 │  3. Initialize Environment (KubernetesEnv)                    │
 │  4. Initialize Agent (QLearning / QLearningFuzzy)             │
 │  5. Initialize Trainer                                        │
@@ -832,12 +830,13 @@ epsilon_decay^(total_steps) = final epsilon
 │  │    ├── MEM: working_set_bytes / limits * 100         │    │
 │  │    ├── RT:  histogram_quantile(0.90, latency)        │    │
 │  │    ├── reward = R_rt - R_cost                        │    │
-│  │    ├── Write to InfluxDB                             │    │
 │  │    └── Return: (next_obs, reward, terminated, info)  │    │
 │  │                         │                           │    │
 │  │  STEP 3: agent.update_q_table(obs, act, rew, nxt)   │    │
 │  │    ├── Q[s,a] += α * (r + γ * max_Q(s') - Q[s,a])  │    │
 │  │    └── epsilon *= epsilon_decay                      │    │
+│  │                         │                           │    │
+│  │  STEP 4: Trainer writes one CSV row                  │    │
 │  │                         │                           │    │
 │  │  terminated? → No: loop | Yes: break                │    │
 │  └──────────────────────────────────────────────────────┘    │
@@ -860,7 +859,7 @@ epsilon_decay^(total_steps) = final epsilon
 Prediction starts from `predict.py`. The key difference from training:
 
 ```python
-# 1-4: Same as training (logger, influxdb, environment, agent)
+# 1-3: Same as training (logger, environment, agent)
 
 # 5. Load trained model
 model_path = os.getenv("MODEL_PATH", "")
@@ -939,7 +938,7 @@ For Q-Fuzzy, the state space is limited (81 combinations = 3^4), so unseen state
 | **Loop**            | Episode-based (bounded)           | **Infinite**                    |
 | **Termination**     | After N episodes                  | Manual only (Ctrl+C)            |
 | **Checkpoint**      | Saves best model                  | **None**                        |
-| **InfluxDB**        | Writes all metrics                | Writes all metrics              |
+| **Metrics logging** | Trainer writes a CSV row per step | **None** (`test_model.py` runs a background CSV collector) |
 | **Model**           | Built from scratch or resumed     | **Loaded from file**            |
 | **Goal**            | Learn optimal policy              | **Apply learned policy**        |
 | **reset()**         | Every episode (scale to min)      | Once at startup only            |
@@ -952,12 +951,11 @@ For Q-Fuzzy, the state space is limited (81 combinations = 3^4), so unseen state
 ┌──────────────────────────────────────────────────────────────┐
 │                          predict.py                           │
 │  1. Setup Logger                                              │
-│  2. Connect InfluxDB                                          │
-│  3. Initialize Environment (KubernetesEnv)                    │
-│  4. Initialize Agent (QLearning / QLearningFuzzy)             │
-│  5. agent.load_model(MODEL_PATH)  ← Load trained Q-table     │
-│  6. agent.epsilon = 0             ← CRITICAL: no exploration  │
-│  7. obs = env.reset()             ← Scale to min, init obs   │
+│  2. Initialize Environment (KubernetesEnv)                    │
+│  3. Initialize Agent (QLearning / QLearningFuzzy)             │
+│  4. agent.load_model(MODEL_PATH)  ← Load trained Q-table     │
+│  5. agent.epsilon = 0             ← CRITICAL: no exploration  │
+│  6. obs = env.reset()             ← Scale to min, init obs   │
 └────────────────────────┬─────────────────────────────────────┘
                          │
                          ▼
@@ -975,7 +973,6 @@ For Q-Fuzzy, the state space is limited (81 combinations = 3^4), so unseen state
 │    ├── sleep(wait_time)                                       │
 │    ├── Prometheus: get_metrics(CPU, MEM, RT, RPS)             │
 │    ├── _calculate_reward()  ← computed but not used to learn  │
-│    ├── Write to InfluxDB                                      │
 │    └── Return: (next_obs, reward, terminated, info)           │
 │                         │                                    │
 │  obs = next_obs                                               │

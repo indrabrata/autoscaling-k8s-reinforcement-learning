@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: resource-intensive-qcrisp-metrics
+  namespace: default
+  labels:
+    app: kube-prometheus-stack
+    release: prometheus
+    prometheus: kube-prometheus-stack
+    algorithm: q-learning-crisp
+spec:
+  selector:
+    matchLabels:
+      app: resource-intensive-qcrisp
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 5s
+      scrapeTimeout: 3s

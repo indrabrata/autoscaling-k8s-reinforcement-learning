@@ -8,7 +8,6 @@ from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
 from prometheus_api_client import PrometheusConnect
 
-from database.influxdb import InfluxDB
 from rl.fuzzy import Fuzzy
 from utils import get_metrics, wait_for_pods_ready
 
@@ -31,7 +30,6 @@ class KubernetesEnv:
         wait_time: int = 30,
         verbose: bool = False,
         logger: Optional[Logger] = None,
-        influxdb: Optional[InfluxDB] = None,
         prometheus_url: str = "http://localhost:1234/prometheus",
         metrics_endpoints_method: list[tuple[str, str]] = [
             ("/", "GET"),
@@ -64,7 +62,6 @@ class KubernetesEnv:
         self.timeout = timeout
         self.wait_time = wait_time
         self.last_replica = self.min_replicas
-        self.influxdb = influxdb
         self.prometheus = PrometheusConnect(
             url=prometheus_url,
             disable_ssl=True,
@@ -412,6 +409,10 @@ class KubernetesEnv:
 
         observation = self._get_observation()
 
+        # Accumulate rewards for sample efficiency tracking
+        self.cumulative_reward += reward
+        self.episode_reward += reward
+
         # Includes all state variables, reward breakdown, and derived metrics
         info = {
             "action": action,
@@ -428,44 +429,16 @@ class KubernetesEnv:
             "response_time_percentage": reward_breakdown.get(
                 "response_time_percentage", 0.0
             ),
-            # Include full breakdown for observation (not saved to InfluxDB)
-            **observation,
-            **reward_breakdown,
-        }
-
-        # Clean info for InfluxDB - only essential metrics
-        # Accumulate rewards for sample efficiency tracking
-        self.cumulative_reward += reward
-        self.episode_reward += reward
-
-        influxdb_fields = {
-            "action": action,
-            "reward": reward,
+            # Episode accounting
             "cumulative_reward": self.cumulative_reward,
             "episode_reward": self.episode_reward,
             "episode_number": self.episode_number,
             "q_table_size": q_table_size,
-            "terminated": int(terminated),
-            "iteration": self.iteration,
-            "replica_state": self.replica_state,
-            "cpu_usage": self.cpu_usage,
-            "memory_usage": self.memory_usage,
-            "response_time": self.response_time,
-            "response_time_percentage": reward_breakdown.get(
-                "response_time_percentage", 0.0
-            ),
+            # Include full breakdown for observation
+            **observation,
+            **reward_breakdown,
         }
 
-        if self.influxdb:
-            self.influxdb.write_point(
-                measurement="autoscaling_metrics",
-                tags={
-                    "namespace": self.namespace,
-                    "deployment": self.deployment_name,
-                    "algorithm": self.algorithm,
-                },
-                fields=influxdb_fields,
-            )
         return observation, reward, terminated, info
 
     def reset(self) -> dict[str, Union[float, str]]:
