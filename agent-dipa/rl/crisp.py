@@ -15,9 +15,11 @@ class Crisp:
     state key.
 
     The cut-offs come from CRISP_BOUNDARIES, i.e. the midpoints of the zones
-    where the trapezoids overlap (35.0 and 65.0). They are derived rather than
-    hand-picked so that any change to the trapezoids moves the fuzzy and crisp
-    agents together.
+    where the trapezoids overlap (32.5 and 67.5). Because the trapezoids form a
+    Ruspini partition, that midpoint is exactly where the two memberships
+    cross, so the crisp bands change hands at the same points the fuzzy labels
+    do. They are derived rather than hand-picked so that any change to the
+    trapezoids moves the fuzzy and crisp agents together.
     """
 
     def __init__(self, logger: Optional[Logger] = None, max_replicas: int = 12):

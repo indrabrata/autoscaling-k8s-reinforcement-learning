@@ -12,10 +12,16 @@ StateKey = Tuple[str, str, str, str]
 # These are the single source of truth for all three agents: the fuzzy agent
 # reads the membership degrees, the crisp agent reads the boundaries derived
 # from them (see CRISP_BOUNDARIES). The conventional agent ignores both.
+# A Ruspini partition: each descending edge coincides exactly with the next
+# set's ascending edge (low falls over [25, 40] as medium rises over [25, 40];
+# medium falls over [60, 75] as high rises over [60, 75]). So the membership
+# degrees sum to 1 everywhere, the overlap midpoint equals the crossover point,
+# and the weight normalization in get_activations is a no-op rather than a
+# correction. See CRISP_BOUNDARIES for how the crisp agent reuses these edges.
 TRAPEZOIDS: Dict[str, Tuple[float, float, float, float]] = {
-    "low": (0.0, 0.0, 20.0, 40.0),
-    "medium": (30.0, 45.0, 55.0, 70.0),
-    "high": (60.0, 80.0, 100.0, 100.0),
+    "low": (0.0, 0.0, 25.0, 40.0),
+    "medium": (25.0, 40.0, 60.0, 75.0),
+    "high": (60.0, 75.0, 100.0, 100.0),
 }
 
 METRICS: Tuple[str, str, str, str] = (
@@ -36,7 +42,7 @@ def _trapezoidal(x: float, a: float, b: float, c: float, d: float) -> float:
     # Rising edge, a <= x < b. The bound must be `x < b` rather than
     # `a < x < b`: at exactly x == a a strict lower bound falls through to the
     # falling-edge formula below and returns (d-a)/(d-c), which for `medium`
-    # is 2.67 -- not a membership degree at all. Reaching here already implies
+    # is 3.33 -- not a membership degree at all. Reaching here already implies
     # x >= a, so the lower bound is redundant as well as wrong.
     if x < b:
         return (x - a) / (b - a) if (b - a) != 0 else 0.0
@@ -47,20 +53,24 @@ def _overlap_midpoint(lower: str, upper: str) -> float:
     """
     Midpoint of the zone where two adjacent fuzzy sets overlap.
 
-    `low` fades out over [30, 40] while `medium` fades in over the same span,
-    so the two sets share the interval [b_upper, d_lower]. Its midpoint is the
-    crisp cut-off that splits the overlap evenly between the two labels.
+    `low` fades out over [25, 40] while `medium` fades in over the same span,
+    so the two sets share the interval [a_upper, d_lower]. Because the
+    trapezoids form a Ruspini partition (the two edges coincide), this midpoint
+    is also the crossover where the two membership degrees are equal -- the
+    point where argmax changes hands -- so it is the natural crisp cut-off.
     """
     d_lower = TRAPEZOIDS[lower][3]
-    b_upper = TRAPEZOIDS[upper][0]
-    return (b_upper + d_lower) / 2.0
+    a_upper = TRAPEZOIDS[upper][0]
+    return (a_upper + d_lower) / 2.0
 
 
 # Crisp bin edges derived from the trapezoids above, so the crisp agent
-# partitions the metric space at the same places the fuzzy sets change hands:
-#   low/medium overlap [30, 40] -> 35.0
-#   medium/high overlap [60, 70] -> 65.0
-# Yielding: low = x < 35, medium = 35 <= x < 65, high = x >= 65.
+# partitions the metric space at the same places the fuzzy sets change hands.
+# On a Ruspini partition the overlap midpoint is exactly the membership
+# crossover, so these are the true argmax hand-over points:
+#   low/medium overlap [25, 40] -> 32.5
+#   medium/high overlap [60, 75] -> 67.5
+# Yielding: low = x < 32.5, medium = 32.5 <= x < 67.5, high = x >= 67.5.
 CRISP_BOUNDARIES: Tuple[float, float] = (
     _overlap_midpoint("low", "medium"),
     _overlap_midpoint("medium", "high"),

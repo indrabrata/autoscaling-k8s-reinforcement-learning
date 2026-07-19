@@ -95,14 +95,22 @@ class QLearningBase:
         """Epsilon-greedy over the given Q-values, returning a replica count."""
         if np.random.rand() < self.epsilon:
             action = int(np.random.randint(1, self.n_actions + 1))
-            self.logger.info(
-                f"[Epsilon] value={self.epsilon:.6f} | action=EXPLORATION ({action})"
-            )
+            kind = "EXPLORATION"
         else:
-            action = int(np.argmax(q_values)) + 1
-            self.logger.info(
-                f"[Epsilon] value={self.epsilon:.6f} | action=EXPLOITATION ({action})"
-            )
+            # Break ties uniformly at random rather than with np.argmax, which
+            # always returns the first max index. A freshly allocated state is
+            # all zeros, so argmax would deterministically pick action 1 (the
+            # minimum replica count) for every untrained state -- a systematic
+            # under-provisioning bias whose strength differs per agent (worst
+            # for the continuous agent, which sees mostly novel states), and so
+            # a confound in a comparison that is precisely about state reuse.
+            max_val = np.max(q_values)
+            candidates = np.flatnonzero(q_values == max_val)
+            action = int(np.random.choice(candidates)) + 1
+            kind = "EXPLOITATION"
+        self.logger.info(
+            f"[Epsilon] value={self.epsilon:.6f} | action={kind} ({action})"
+        )
         return action
 
     def get_q_values(self, observation: dict) -> np.ndarray:

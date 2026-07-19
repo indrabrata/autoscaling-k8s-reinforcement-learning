@@ -14,11 +14,11 @@ class QLearningCrisp(QLearningBase):
 
     This is the middle term of the comparison. It borrows the fuzzy study's
     discretization -- the same three bands per metric, cut at the same places
-    (35 and 65, the midpoints of the trapezoid overlaps) -- but assigns each
-    metric to exactly one band. The state space collapses to at most 3^4 = 81
-    keys, but a metric at 34.9 and one at 35.1 land in different states and
-    share nothing, which is precisely the boundary brittleness the fuzzy agent
-    is meant to smooth over.
+    (32.5 and 67.5, the midpoints of the trapezoid overlaps) -- but assigns
+    each metric to exactly one band. The state space collapses to at most
+    3^4 = 81 keys, but a metric at 32.4 and one at 32.6 land in different
+    states and share nothing, which is precisely the boundary brittleness the
+    fuzzy agent is meant to smooth over.
 
     Beyond the state key, the update is identical to conventional Q-learning.
     """

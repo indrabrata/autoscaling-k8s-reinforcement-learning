@@ -37,7 +37,7 @@ if __name__ == "__main__":
             f"Expected one of: {', '.join(sorted(AGENTS))}"
         )
 
-    max_replicas = int(os.getenv("MAX_REPLICAS", "12"))
+    max_replicas = int(os.getenv("MAX_REPLICAS", "10"))
 
     env = KubernetesEnv(
         min_replicas=int(os.getenv("MIN_REPLICAS", "1")),
