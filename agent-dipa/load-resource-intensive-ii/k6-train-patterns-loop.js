@@ -20,7 +20,7 @@ import { check, sleep } from "k6";
  * Usage:
  *   k6 run k6-train-unseen-patterns-loop.js
  *   k6 run -e CYCLES=50 k6-train-unseen-patterns-loop.js
- *   k6 run -e CYCLES=200 -e BASE_URL=http://10.34.4.150:30080/api/qfuzzy k6-train-unseen-patterns-loop.js
+ *   k6 run -e CYCLES=120 -e BASE_URL=http://10.34.211.153:30080/api/qcrisp k6-train-patterns-loop.js
  */
 
 const CYCLES = parseInt(__ENV.CYCLES || "30", 10);
@@ -71,7 +71,7 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || "http://10.34.4.150:30080/api/q";
+const BASE_URL = __ENV.BASE_URL || "http://10.34.211.153:30080/api/q";
 
 console.log("BASE_URL: ", BASE_URL);
 

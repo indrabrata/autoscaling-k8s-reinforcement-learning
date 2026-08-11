@@ -10,18 +10,29 @@ spec:
     name: resource-intensive-q
   minReplicas: 1
   maxReplicas: 10
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-        - type: Pods
-          value: 10
-          periodSeconds: 60
-      selectPolicy: Max
-    scaleDown:
-      stabilizationWindowSeconds: 60
-      policies:
-        - type: Pods
-          value: 10
-          periodSeconds: 60
-      selectPolicy: Max
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: resource-intensive-qcrisp-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: resource-intensive-qcrisp
+  minReplicas: 1
+  maxReplicas: 10
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: resource-intensive-qfuzzy-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: resource-intensive-qfuzzy
+  minReplicas: 1
+  maxReplicas: 10
