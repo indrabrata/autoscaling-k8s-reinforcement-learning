@@ -80,6 +80,7 @@ if __name__ == "__main__":
 
     agent.load_model(model_path)
     agent.epsilon = 0  # Pure exploitation, no exploration
+    agent.deterministic = True  # Ties broken by argmax, so a run is reproducible
 
     # Start metrics collector in background thread
     now = datetime.now().strftime("%Y%m%d_%H%M%S")

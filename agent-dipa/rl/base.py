@@ -5,9 +5,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class QLearningBase:
@@ -50,6 +47,9 @@ class QLearningBase:
         self.n_actions = n_actions
         self.episodes_trained = 0
         self.q_table = {}
+        # Evaluation runs set this (see test_model.py). It changes only how a tie
+        # between equal Q-values is broken -- see select_action.
+        self.deterministic = False
         self.logger = logger or Logger(__name__)
 
         self.logger.info(f"Initialized {self.agent_type} agent")
@@ -96,14 +96,28 @@ class QLearningBase:
         if np.random.rand() < self.epsilon:
             action = int(np.random.randint(1, self.n_actions + 1))
             kind = "EXPLORATION"
+        elif self.deterministic:
+            # Evaluation: np.argmax, matching the original implementation this
+            # study builds on, so test results stay comparable with the earlier
+            # campaign and are reproducible run to run.
+            #
+            # Know what this does on a tie. A freshly allocated state is all
+            # zeros, so argmax returns index 0 and the agent asks for action 1
+            # the minimum replica count, every time it meets a state it has not
+            # seen. The effect scales with how often that happens: the
+            # continuous agent reuses ~0% of its states and so holds 1 replica
+            # for an entire test run, while the crisp and fuzzy agents reuse
+            # ~90% and ~99% and are barely touched. That asymmetry is the
+            # finding, not an accident -- but note that the specific value 1 is
+            # an artefact of argmax picking index 0, whereas the 0% reuse it
+            # exposes is a property of the continuous state key itself.
+            action = int(np.argmax(q_values)) + 1
+            kind = "EXPLOITATION"
         else:
-            # Break ties uniformly at random rather than with np.argmax, which
-            # always returns the first max index. A freshly allocated state is
-            # all zeros, so argmax would deterministically pick action 1 (the
-            # minimum replica count) for every untrained state -- a systematic
-            # under-provisioning bias whose strength differs per agent (worst
-            # for the continuous agent, which sees mostly novel states), and so
-            # a confound in a comparison that is precisely about state reuse.
+            # Training: break ties uniformly at random. With every Q-value equal
+            # there is no basis to prefer any action, and argmax would quietly
+            # bias exploration toward the minimum replica count on every state
+            # the agent has not seen yet.
             max_val = np.max(q_values)
             candidates = np.flatnonzero(q_values == max_val)
             action = int(np.random.choice(candidates)) + 1

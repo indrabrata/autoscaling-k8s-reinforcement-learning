@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
+import urllib3
 
 if os.name == "nt":
     try:
@@ -43,6 +44,10 @@ def setup_logger(
     logging.getLogger("kubernetes.client.rest").setLevel(logging.WARNING)
     logging.getLogger("kubernetes").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
+    # Moved here from rl/base.py, which does no networking at all: keeping it
+    # there forced every consumer of the agent classes -- the analysis notebooks
+    # included -- to have urllib3 installed.
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
